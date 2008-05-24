@@ -13,7 +13,76 @@
 #include "User.h"
 #include "znc.h"
 
+static int cert_verify_cb(int ok, X509_STORE_CTX *ctx)
+{
+	cerr << "cert_verify_cb(" << ok << ", " << ctx << ")\n";
+
+	X509 *client_cert;
+	int err;
+	int depth;
+
+	client_cert = X509_STORE_CTX_get_current_cert(ctx);
+	err = X509_STORE_CTX_get_error(ctx);
+	depth = X509_STORE_CTX_get_error_depth(ctx);
+
+	cerr << "err: " << err << " (" << X509_verify_cert_error_string(err) << ")\n";
+	cerr << " depth: " << depth << "\n";
+
+	if (!ok) {
+		cerr << "DAMN!" << endl;
+//		return ok;
+	}
+
+	char subject[1024];
+	char issuer[1024];
+	char common[1024];
+
+	subject[0] = '\0';
+	issuer[0] = '\0';
+	common[0] = '\0';
+
+	X509_NAME_oneline(X509_get_subject_name(client_cert), subject, sizeof(subject));
+	X509_NAME_oneline(X509_get_issuer_name(ctx->current_cert), issuer, sizeof(issuer));
+	X509_NAME_get_text_by_NID(X509_get_subject_name(client_cert), NID_commonName,
+			common, sizeof(common));
+
+	subject[sizeof(subject) - 1] = '\0';
+	issuer[sizeof(issuer) - 1] = '\0';
+	common[sizeof(common) - 1] = '\0';
+
+	unsigned int n;
+	unsigned char md[EVP_MAX_MD_SIZE];
+	const EVP_MD *digest = EVP_md5(); // memleak?
+
+	if (!X509_digest(client_cert, digest, md, &n))
+		cerr << "Fingerprint: no clue\n";
+	else {
+		cerr << "Fingerprint: ";
+		char hex[] = "0123456789ABCDEF";
+		for (unsigned int i = 0; i < n; i++)
+			cerr << hex[md[i] >> 4 & 0xf] << hex[md[i] & 0xf] << ":";
+		cerr << "\n";
+	}
+
+
+	cerr << "Subject: " << subject << "\n";
+	cerr << "Issuer: " << issuer << "\n";
+	cerr << "Common: " << common << "\n";
+
+	switch(ctx->error) {
+	case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
+		cerr << "1\n";
+		break;
+	// TODO
+	}
+
+	cerr << "done\n" << endl;
+
+	return 1;
+}
+
 CIRCSock::CIRCSock(CUser* pUser) : Csock() {
+	SetCertVerifyCB(cert_verify_cb);
 	m_pUser = pUser;
 	m_bISpoofReleased = false;
 	m_bAuthed = false;
