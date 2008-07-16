@@ -203,7 +203,6 @@ bool CZNC::HandleUserDeletion()
 	}
 
 	m_msDelUsers.clear();
-	RestartConnectUser();
 
 	return true;
 }
@@ -888,9 +887,6 @@ bool CZNC::RehashConfig(CString& sError)
 	m_msDelUsers = m_msUsers;
 	m_msUsers.clear();
 
-	// Make sure that timer doesn't have a stale iterator
-	DisableConnectUser();
-
 	if (DoRehash(sError)) {
 #ifdef _MODULES
 		GetModules().OnPostRehash();
@@ -909,9 +905,6 @@ bool CZNC::RehashConfig(CString& sError)
 		AddUser(m_msDelUsers.begin()->second, s);
 		m_msDelUsers.erase(m_msDelUsers.begin());
 	}
-
-	// Make sure that users that want to connect do so
-	RestartConnectUser();
 
 	return false;
 }
@@ -966,9 +959,6 @@ bool CZNC::DoRehash(CString& sError)
 		delete m_vpListeners[0];
 		m_vpListeners.erase(m_vpListeners.begin());
 	}
-
-	// Make sure that timer doesn't have a stale iterator
-	DisableConnectUser();
 
 	CString sLine;
 	bool bCommented = false;	// support for /**/ style comments
@@ -1564,7 +1554,7 @@ bool CZNC::DoRehash(CString& sError)
 	}
 
 	// Make sure that users that want to connect do so
-	RestartConnectUser();
+	EnableConnectUser();
 
 	return true;
 }
@@ -1726,36 +1716,45 @@ public:
 	CConnectUserTimer(int iSecs) : CCron() {
 		SetName("Connect users");
 		Start(iSecs);
-		m_itUserIter = CZNC::Get().GetUserMap().begin();
+		m_uiPosNextUser = 0;
 	}
 	virtual ~CConnectUserTimer() {}
 
 protected:
 	virtual void RunJob() {
 		unsigned int uiUserCount;
-		map<CString,CUser*>::const_iterator end;
 		bool bUsersLeft = false;
+		const map<CString,CUser*>& mUsers = CZNC::Get().GetUserMap();
+		map<CString,CUser*>::const_iterator it = mUsers.begin();
 
 		uiUserCount = CZNC::Get().GetUserMap().size();
-		end = CZNC::Get().GetUserMap().end();
+
+		if (m_uiPosNextUser >= uiUserCount) {
+			m_uiPosNextUser = 0;
+		}
+
+		for (unsigned int i = 0; i < m_uiPosNextUser; i++) {
+			it++;
+		}
 
 		// Try to connect each user, if this doesnt work, abort
 		for (unsigned int i = 0; i < uiUserCount; i++) {
-			if (m_itUserIter == end) {
-				m_itUserIter = CZNC::Get().GetUserMap().begin();
-			}
+			if (it == mUsers.end())
+				it = mUsers.begin();
 
-			CUser* pUser = m_itUserIter->second;
-
-			m_itUserIter++;
+			CUser* pUser = it->second;
+			it++;
+			m_uiPosNextUser = (m_uiPosNextUser + 1) % uiUserCount;
 
 			// Is this user disconnected and does he want to connect?
-			if (pUser->GetIRCSock() == NULL && pUser->GetIRCConnectEnabled())
+			if (pUser->GetIRCSock() == NULL && pUser->GetIRCConnectEnabled()) {
+				// The timer runs until it once didn't find any users to connect
 				bUsersLeft = true;
 
-			if (CZNC::Get().ConnectUser(pUser))
-				// Wait until next time timer fires
-				return;
+				if (CZNC::Get().ConnectUser(pUser))
+					// User connecting, wait until next time timer fires
+					return;
+			}
 		}
 
 		if (bUsersLeft == false)
@@ -1763,7 +1762,7 @@ protected:
 	}
 
 private:
-	map<CString,CUser*>::const_iterator	m_itUserIter;
+	size_t	m_uiPosNextUser;
 };
 
 void CZNC::EnableConnectUser() {
@@ -1781,17 +1780,4 @@ void CZNC::DisableConnectUser() {
 	// This will kill the cron
 	m_pConnectUserTimer->Stop();
 	m_pConnectUserTimer = NULL;
-}
-
-void CZNC::RestartConnectUser() {
-	DisableConnectUser();
-
-	map<CString, CUser*>::iterator end = m_msUsers.end();
-	for (map<CString,CUser*>::iterator it = m_msUsers.begin(); it != end; it++) {
-		// If there is a user without irc socket we need the timer
-		if (it->second->GetIRCSock() == NULL) {
-			EnableConnectUser();
-			return;
-		}
-	}
 }
