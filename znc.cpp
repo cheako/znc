@@ -1751,14 +1751,19 @@ protected:
 				// The timer runs until it once didn't find any users to connect
 				bUsersLeft = true;
 
+				DEBUG_ONLY(cout << "Connecting user [" << pUser->GetUserName()
+						<< "]" << endl);
+
 				if (CZNC::Get().ConnectUser(pUser))
 					// User connecting, wait until next time timer fires
 					return;
 			}
 		}
 
-		if (bUsersLeft == false)
+		if (bUsersLeft == false) {
+			DEBUG_ONLY(cout << "ConnectUserTimer done" << endl);
 			CZNC::Get().DisableConnectUser();
+		}
 	}
 
 private:
