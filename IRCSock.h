@@ -98,6 +98,16 @@ protected:
 	CString						m_sPass;
 	map<CString, CChan*>		m_msChans;
 	unsigned int				m_uMaxNickLen;
+
+	typedef bool (CIRCSock::*CommandCallback)(const CString& sSource,
+			const CString& sCmd, const CString& sRest);
+	struct Command { const char* command; CommandCallback callback; };
+	static const struct Command m_Commands[];
+#define COMMAND(name) \
+	bool Command ## name (const CString& sSource, const CString& sCmd, \
+			const CString& sRest)
+	COMMAND(PING);
+	COMMAND(001);
 };
 
 #endif // !_IRCSOCK_H
