@@ -85,6 +85,7 @@ void CIRCSock::ReadLine(const CString& sData) {
 	CString sCmd;
 	CString sRest;
 	int i;
+	VCString vsParams;
 
 	if (sLine[0] == ':') {
 		sSource = sLine.Token(0).LeftChomp_n();
@@ -97,10 +98,21 @@ void CIRCSock::ReadLine(const CString& sData) {
 	sRest = sLine.Token(i + 1, true);
 
 	i = 0;
+	CString sTmp;
+	while (!(sTmp = sRest.Token(i)).empty()) {
+		if (sTmp.Left(1) == ":") {
+			vsParams.push_back(sRest.Token(i, true).LeftChomp_n());
+			break;
+		}
+		vsParams.push_back(sTmp);
+		i++;
+	}
+
+	i = 0;
 	while (m_Commands[i].command != NULL) {
 		if (sCmd.StrCmp(m_Commands[i].command) == 0) {
 			// Returns true if this should be forwarded to the user
-			if ((this->*m_Commands[i].callback)(sSource, sCmd, sRest))
+			if ((this->*m_Commands[i].callback)(sSource, sCmd, vsParams))
 				m_pUser->PutUser(sLine);
 			return;
 		}
@@ -1098,13 +1110,13 @@ void CIRCSock::ResetChans() {
 
 #define COMMAND_HANDLER(command) \
 	bool CIRCSock::Command ## command(const CString& sSource, \
-			const CString& sCmd, const CString& sRest)
+			const CString& sCmd, const VCString& sRest)
 COMMAND_HANDLER(001) {
-	cout << "PING" << sSource << " " << sCmd << " " << sRest;
+	cout << "PING" << sSource << " " << sCmd << " "/* << sRest*/;
 	return true;
 }
 COMMAND_HANDLER(PING) {
-	cout << "PING" << sSource << " " << sCmd << " " << sRest;
+	cout << "PING" << sSource << " " << sCmd << " " /*<< sRest*/;
 	return true;
 }
 const struct CIRCSock::Command CIRCSock::m_Commands[] = {
