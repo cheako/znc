@@ -71,12 +71,6 @@ void CClient::ReadLine(const CString& sData) {
 
 	DEBUG_ONLY(cout << "(" << ((m_pUser) ? m_pUser->GetUserName() : CString("")) << ") CLI -> ZNC [" << sLine << "]" << endl);
 
-#ifdef _MODULES
-	if (IsAttached()) {
-		MODULECALL(OnUserRaw(sLine), m_pUser, this, return);
-	}
-#endif
-
 	CString sCommand = sLine.Token(0);
 	if (sCommand.Left(1) == ":") {
 		// Evil client! Sending a nickmask prefix on client's command
@@ -84,6 +78,12 @@ void CClient::ReadLine(const CString& sData) {
 		sLine = sLine.Token(1, true);
 		sCommand = sLine.Token(0);
 	}
+
+#ifdef _MODULES
+	if (IsAttached()) {
+		MODULECALL(OnUserRaw(sLine), m_pUser, this, return);
+	}
+#endif
 
 	if (sCommand.CaseCmp("PASS") == 0) {
 		if (!IsAttached()) {
