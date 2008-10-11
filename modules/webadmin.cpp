@@ -909,6 +909,11 @@ bool CWebAdminSock::UserPage(CString& sPageRet, CUser* pUser) {
 			o11["Name"] = "denysetvhost";
 			o11["DisplayName"] = "Deny SetVHost";
 			if (pUser && pUser->DenySetVHost()) { o11["Checked"] = "true"; }
+
+			CTemplate& o12 = m_Template.AddRow("OptionLoop");
+			o12["Name"] = "denysetserver";
+			o12["DisplayName"] = "Deny SetServer";
+			if (pUser && pUser->DenySetServer()) { o12["Checked"] = "true"; }
 		}
 
 		PrintPage(sPageRet, "UserPage.tmpl");
@@ -998,12 +1003,21 @@ CUser* CWebAdminSock::GetNewUser(CString& sPageRet, CUser* pUser) {
 		pNewUser->SetPass(sSaltedPass.MD5(), true, sSalt);
 	}
 
+
+	const vector<CServer*>& vServers = pUser->GetServers();
 	VCString vsArgs;
 	GetParam("servers").Split("\n", vsArgs);
 	unsigned int a = 0;
 
-	for (a = 0; a < vsArgs.size(); a++) {
-		pNewUser->AddServer(vsArgs[a].Trim_n());
+	if (IsAdmin() || !m_pSessionUser->DenySetServer()) {
+		for (a = 0; a < vsArgs.size(); a++) {
+			pNewUser->AddServer(vsArgs[a].Trim_n());
+		}
+	}
+	 else {
+		for (a = 0; a < vServers.size(); a++) {
+			pNewUser->AddServer(vServers[a]->GetString());
+		}
 	}
 
 	GetParam("allowedips").Split("\n", vsArgs);
@@ -1094,9 +1108,11 @@ CUser* CWebAdminSock::GetNewUser(CString& sPageRet, CUser* pUser) {
 	if (IsAdmin()) {
 		pNewUser->SetDenyLoadMod(GetParam("denyloadmod").ToBool());
 		pNewUser->SetDenySetVHost(GetParam("denysetvhost").ToBool());
+		pNewUser->SetDenySetServer(GetParam("denysetserver").ToBool());
 	} else if (pUser) {
 		pNewUser->SetDenyLoadMod(pUser->DenyLoadMod());
 		pNewUser->SetDenySetVHost(pUser->DenySetVHost());
+		pNewUser->SetDenySetServer(pUser->DenySetServer());
 	}
 
 	if (pUser && pUser != CZNC::Get().FindUser(GetUser())) {

@@ -1224,6 +1224,9 @@ bool CZNC::DoRehash(CString& sError)
 					} else if (sName.Equals("DenySetVHost")) {
 						pUser->SetDenySetVHost(sValue.Equals("true"));
 						continue;
+					} else if (sName.CaseCmp("DenySetserver") == 0) {
+						pUser->SetDenySetServer((sValue.CaseCmp("TRUE") == 0));
+						continue;
 					} else if (sName.Equals("StatusPrefix")) {
 						if (!pUser->SetStatusPrefix(sValue)) {
 							sError = "Invalid StatusPrefix [" + sValue + "] Must be 1-5 chars, no spaces.";

@@ -125,6 +125,7 @@ public:
 	void SetDenyLoadMod(bool b);
 	void SetAdmin(bool b);
 	void SetDenySetVHost(bool b);
+	void SetDenySetServer(bool b);
 	bool SetStatusPrefix(const CString& s);
 	void SetDefaultChanModes(const CString& s);
 	void SetIRCNick(const CNick& n);
@@ -174,6 +175,7 @@ public:
 	bool DenyLoadMod() const;
 	bool IsAdmin() const;
 	bool DenySetVHost() const;
+	bool DenySetServer() const;
 	bool BounceDCCs() const;
 	bool MultiClients() const;
 	const CString& GetStatusPrefix() const;
@@ -231,6 +233,7 @@ protected:
 	bool				m_bDenyLoadMod;
 	bool				m_bAdmin;
 	bool				m_bDenySetVHost;
+	bool				m_bDenySetServer;
 	bool				m_bKeepBuffer;
 	bool				m_bBeingDeleted;
 	bool				m_bAppendTimestamp;

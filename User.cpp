@@ -37,6 +37,7 @@ CUser::CUser(const CString& sUserName) {
 	m_bDenyLoadMod = false;
 	m_bAdmin= false;
 	m_bDenySetVHost= false;
+	m_bDenySetServer= true;
 	m_sStatusPrefix = "*";
 	m_sChanPrefixes = "";
 	m_uBufferCount = 50;
@@ -427,6 +428,7 @@ bool CUser::Clone(const CUser& User, CString& sErrorRet, bool bCloneChans) {
 	SetDenyLoadMod(User.DenyLoadMod());
 	SetAdmin(User.IsAdmin());
 	SetDenySetVHost(User.DenySetVHost());
+	SetDenySetServer(User.DenySetServer());
 	SetTimestampAppend(User.GetTimestampAppend());
 	SetTimestampPrepend(User.GetTimestampPrepend());
 	SetTimestampFormat(User.GetTimestampFormat());
@@ -581,6 +583,7 @@ bool CUser::WriteConfig(CFile& File) {
 	PrintLine(File, "DenyLoadMod", CString(DenyLoadMod()));
 	PrintLine(File, "Admin", CString(IsAdmin()));
 	PrintLine(File, "DenySetVHost", CString(DenySetVHost()));
+	PrintLine(File, "DenySetServer", CString(DenySetServer()));
 	PrintLine(File, "DCCLookupMethod", CString((UseClientIP()) ? "client" : "default"));
 	PrintLine(File, "TimestampFormat", GetTimestampFormat());
 	PrintLine(File, "AppendTimestamp", CString(GetTimestampAppend()));
@@ -1031,6 +1034,7 @@ void CUser::SetUseClientIP(bool b) { m_bUseClientIP = b; }
 void CUser::SetDenyLoadMod(bool b) { m_bDenyLoadMod = b; }
 void CUser::SetAdmin(bool b) { m_bAdmin = b; }
 void CUser::SetDenySetVHost(bool b) { m_bDenySetVHost = b; }
+void CUser::SetDenySetServer(bool b) { m_bDenySetServer = b; }
 void CUser::SetDefaultChanModes(const CString& s) { m_sDefaultChanModes = s; }
 void CUser::SetIRCServer(const CString& s) { m_sIRCServer = s; }
 void CUser::SetQuitMsg(const CString& s) { m_sQuitMsg = s; }
@@ -1101,6 +1105,7 @@ bool CUser::UseClientIP() const { return m_bUseClientIP; }
 bool CUser::DenyLoadMod() const { return m_bDenyLoadMod; }
 bool CUser::IsAdmin() const { return m_bAdmin; }
 bool CUser::DenySetVHost() const { return m_bDenySetVHost; }
+bool CUser::DenySetServer() const { return m_bDenySetServer; }
 bool CUser::MultiClients() const { return m_bMultiClients; }
 bool CUser::BounceDCCs() const { return m_bBounceDCCs; }
 const CString& CUser::GetStatusPrefix() const { return m_sStatusPrefix; }
