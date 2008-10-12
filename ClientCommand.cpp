@@ -313,7 +313,7 @@ void CClient::UserCommand(const CString& sLine) {
 		}
 
 		PutStatus(Table);
-	} else if (sCommand.Equals("ADDSERVER")) {
+	} else if ((m_pUser->IsAdmin() || !m_pUser->DenySetServer()) && (sCommand.Equals("ADDSERVER"))) {
 		CString sServer = sLine.Token(1);
 
 		if (sServer.empty()) {
@@ -331,7 +331,9 @@ void CClient::UserCommand(const CString& sLine) {
 		} else {
 			PutStatus("Unable to add that server");
 		}
-	} else if (sCommand.Equals("REMSERVER") || sCommand.Equals("DELSERVER")) {
+	} else if ((!m_pUser->IsAdmin() || m_pUser->DenySetServer()) && (sCommand.Equals("ADDSERVER"))) {
+		PutStatus("You are not allowed to add a server");
+	} else if ((m_pUser->IsAdmin() || !m_pUser->DenySetServer()) && (sCommand.Equals("REMSERVER") || sCommand.Equals("DELSERVER"))) {
 		CString sServer = sLine.Token(1);
 
 		if (sServer.empty()) {
@@ -351,6 +353,8 @@ void CClient::UserCommand(const CString& sLine) {
 		} else {
 			PutStatus("No such server");
 		}
+	} else if ((!m_pUser->IsAdmin() || m_pUser->DenySetServer()) && (sCommand.Equals("REMSERVER") || sCommand.Equals("DELSERVER"))) {
+		PutStatus("You are not allowed to delete a server");
 	} else if (sCommand.Equals("LISTSERVERS")) {
 		if (m_pUser->HasServers()) {
 			const vector<CServer*>& vServers = m_pUser->GetServers();
