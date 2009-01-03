@@ -1029,7 +1029,7 @@ bool Csock::SSLClientSetup()
 	if ( !m_ssl_ctx )
 		return( false );
 
-	SSL_CTX_load_verify_locations(m_ssl_ctx, NULL, "/etc/ssl/certs");
+	SSL_CTX_set_default_verify_paths( m_ssl_ctx );
 
 	if ( !m_sPemFile.empty() )
 	{	// are we sending a client cerificate ?
