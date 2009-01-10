@@ -76,6 +76,36 @@ static int cert_verify_cb(int ok, X509_STORE_CTX *ctx)
 	// TODO
 	}
 
+	if (depth == 0) {
+		// We made it to the 'real' cert, check if the hostnmae matches
+		Csock *pSock = GetCsockFromCTX(ctx);
+		if (!pSock) {
+			cerr << "WTF, ssl check on an unknown socket?" << endl;
+			return 0;
+		}
+		bool host_ok = false;
+		CString sCommon(common);
+		CString sHost(pSock->GetHostName());
+		if (sCommon.Left(2) == "*.") {
+			// This is a wildcard cert :(
+			// Remove the * (the . stays!) and check if it matches
+			sCommon = sCommon.substr(1);
+			if (sCommon == sHost.Right(sCommon.length()))
+				host_ok = true;
+			else if (sCommon.substr(1) == sHost)
+				/* We did not connect to some subdomain */
+				host_ok = true;
+		} else if (sCommon == sHost)
+			host_ok = true;
+
+		if (!host_ok) {
+			cerr << "Certificate doesn't match host name! ("
+				<< common << " != " << pSock->GetHostName() << ")" << endl;
+			return 0;
+		} else
+			cerr << "Host matches" << endl;
+	}
+
 	cerr << "done\n" << endl;
 
 	return 1;
