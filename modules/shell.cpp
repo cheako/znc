@@ -6,6 +6,8 @@
  * by the Free Software Foundation.
  */
 
+#ifndef _WIN32
+
 #include "User.h"
 #include "znc.h"
 
@@ -186,3 +188,4 @@ void CShellSock::Disconnected() {
 
 MODULEDEFS(CShellMod, "Gives shell access")
 
+#endif

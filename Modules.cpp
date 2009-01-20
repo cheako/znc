@@ -11,11 +11,48 @@
 #include "Modules.h"
 #include "User.h"
 #include "znc.h"
-#include <dlfcn.h>
 
-#ifndef RTLD_LOCAL
-# define RTLD_LOCAL 0
-# warning "your crap box doesnt define RTLD_LOCAL !?"
+#ifndef _WIN32
+#  include <dlfcn.h>
+
+#  ifndef RTLD_LOCAL
+#    define RTLD_LOCAL 0
+#    warning "your crap box doesnt define RTLD_LOCAL !?"
+#  endif
+#else
+#  include "windows.h"
+
+#  define RTLD_LOCAL	0
+#  define RTLD_GLOBAL	0
+#  define RTLD_LAZY	0
+#  define RTLD_NOW	0
+
+// Windows does it completly different again
+static ModHandle dlopen(const char *name, int flag) {
+	return LoadLibrary(name);
+}
+
+static void *dlsym(ModHandle mod, const char *sym) {
+	return (void *) GetProcAddress(mod, sym);
+}
+
+static void dlclose(ModHandle mod) {
+	FreeLibrary(mod);
+}
+
+// Taken from inspircd
+static const char *dlerror() {
+	static char errormessage[500];
+	DWORD error = GetLastError();
+	SetLastError(0);
+	if (error == 0)
+		return NULL;
+
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, error,
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			(LPTSTR)errormessage, sizeof(errormessage), 0);
+	return errormessage;
+}
 #endif
 
 #define _MODUNLOADCHK(func, type)								\

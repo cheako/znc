@@ -55,6 +55,12 @@ case "${host_os}" in
 	;;
 	cygwin)
 		ISCYGWIN=1
+		ISWIN=1
+	;;
+	mingw*)
+		ISMINGW=1
+		ISWIN=1
+		appendLib -lws2_32
 	;;
 	darwin*)
 		ISDARWIN=1
@@ -98,6 +104,9 @@ if test "$DEBUG" != "no"; then
 else
 	if test "x$OPTIMIZE" = "xyes"; then
 		appendCXX -O2
+	fi
+	if test -n "$ISMINGW" ; then
+		AC_ERROR([You have to use --enable-debug for mingw])
 	fi
 fi
 
@@ -159,6 +168,11 @@ if test "$MODULES" = "yes"; then
 
 	appendLib "$SAVED_LIBS"
 
+	if test -n "$ISMINGW" ; then
+		# Just pretend, Modules.cpp will handle this
+		FOUND_DL=yes
+	fi
+
 	if test $FOUND_DL = "no" ; then
 		AC_MSG_ERROR([could not find dlopen. Try --disable-modules])
 	fi
@@ -177,14 +191,21 @@ if test "$MODULES" = "yes"; then
 		appendMod -mimpure-text
 	fi
 
-	if test -z "$ISCYGWIN" ; then
-		# cygwin doesn't need -fPIC, everything else does (for modules)
+	if test -z "$ISWIN" ; then
+		# windows doesn't need -fPIC, everything else does (for modules)
 		# warning: -fPIC ignored for target (all code is position independent)
 		appendMod -fPIC
 	else
 		# But cygwin does want most of znc in a shared lib
 		LIBZNC="libznc.dll"
 		LIBZNCDIR="$libdir/znc"
+	fi
+
+	if test -n "$ISMINGW" ; then
+		# To get rid of some warnings, mingw needs this flag when
+		# linking to libznc.dll
+		appendMod -Wl,--enable-auto-import
+		appendLD -Wl,--enable-auto-import
 	fi
 
 	if test -z "$ISDARWIN"; then

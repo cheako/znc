@@ -11,8 +11,10 @@
 #include "IRCSock.h"
 #include "Server.h"
 #include "User.h"
-#include <pwd.h>
 #include <list>
+#ifndef _WIN32
+#  include <pwd.h>
+#endif
 
 namespace
 { // private namespace for local things
@@ -415,6 +417,7 @@ void CZNC::InitDirs(const CString& sArgvPath, const CString& sDataDir) {
 		m_sHomePath = home;
 	}
 
+#ifndef _WIN32
 	if (m_sHomePath.empty()) {
 		struct passwd* pUserInfo = getpwuid(getuid());
 
@@ -422,6 +425,7 @@ void CZNC::InitDirs(const CString& sArgvPath, const CString& sDataDir) {
 			m_sHomePath = pUserInfo->pw_dir;
 		}
 	}
+#endif
 
 	if (m_sHomePath.empty()) {
 		m_sHomePath = m_sCurPath;

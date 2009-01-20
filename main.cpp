@@ -44,6 +44,7 @@ static void GenerateHelp(const char *appname) {
 	CUtils::PrintMessage("\t-d, --datadir      Set a different znc repository (default is ~/.znc)");
 }
 
+#ifndef _WIN32
 static void die(int sig) {
 	signal(SIGPIPE, SIG_DFL);
 
@@ -70,6 +71,7 @@ static bool isRoot() {
 
 	return false;
 }
+#endif
 
 int main(int argc, char** argv) {
 	CString sConfig;
@@ -190,6 +192,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
+#ifndef _WIN32
 	if (isRoot()) {
 		CUtils::PrintError("You are running ZNC as root! Don't do that! There are not many valid");
 		CUtils::PrintError("reasons for this and it can, in theory, cause great damage!");
@@ -202,6 +205,7 @@ int main(int argc, char** argv) {
 		CUtils::PrintError("ZNC will start in 30 seconds.");
 		sleep(30);
 	}
+#endif
 
 	if (bForeground) {
 		int iPid = getpid();
@@ -244,6 +248,7 @@ int main(int argc, char** argv) {
 		// controlling terminal). We are independent!
 	}
 
+#ifndef _WIN32
 	struct sigaction sa;
 	sa.sa_flags = 0;
 	sigemptyset(&sa.sa_mask);
@@ -264,6 +269,7 @@ int main(int argc, char** argv) {
 	sigaction(SIGBUS,  &sa, (struct sigaction*) NULL);
 	sigaction(SIGSEGV, &sa, (struct sigaction*) NULL);
 	sigaction(SIGTERM, &sa, (struct sigaction*) NULL);
+#endif
 
 	int iRet = 0;
 

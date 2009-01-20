@@ -32,11 +32,13 @@ using std::endl;
 
 static inline void SetFdCloseOnExec(int fd)
 {
+#ifndef _WIN32
 	int flags = fcntl(fd, F_GETFD, 0);
 	if (flags < 0)
 		return; // Ignore errors
 	// When we execve() a new process this fd is now automatically closed.
 	fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+#endif // ! _WIN32
 }
 
 static const char g_HexDigits[] = "0123456789abcdef";

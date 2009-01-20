@@ -35,6 +35,9 @@
 
 #ifndef _HAS_CSOCKET_
 #define _HAS_CSOCKET_
+
+#define WINVER 0x0501
+
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/time.h>

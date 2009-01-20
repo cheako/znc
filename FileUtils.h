@@ -283,6 +283,7 @@ protected:
 	bool				m_bDesc;
 };
 
+#ifndef _WIN32
 //! @author imaginos@imaginos.net
 class CExecSock : public Csock {
 public:
@@ -315,4 +316,6 @@ public:
 private:
 	int			m_iPid;
 };
+#endif // ! _WIN32
+
 #endif // !_FILEUTILS_H

@@ -36,7 +36,11 @@ class CClient;
 #endif
 #endif
 
+#ifndef _WIN32
 typedef void* ModHandle;
+#else
+typedef HMODULE ModHandle;
+#endif
 
 #define MODCONSTRUCTOR(CLASS) \
 	CLASS(ModHandle pDLL, CUser* pUser, const CString& sModName, \

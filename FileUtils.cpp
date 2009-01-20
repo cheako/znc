@@ -10,7 +10,11 @@
 #include "Utils.h"
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/wait.h>
+#ifndef _WIN32
+#  include <sys/wait.h> // Needed for waitpid()
+#else
+#  include <shlobj.h> // Needed for SHCreateDirectoryEx
+#endif
 
 #ifndef HAVE_LSTAT
 #  define lstat(a, b)	stat(a, b)
@@ -18,6 +22,20 @@
 
 #ifndef O_BINARY
 #  define O_BINARY	0
+#endif
+
+#ifdef _WIN32
+#  define fchmod(a, b)	0
+#  define chmod(a, b)	0
+
+#  define O_NOCTTY	0
+
+#  define LOCK_EX	0
+#  define LOCK_NB	0
+#  define LOCK_UN	0
+#  define flock(a, b)	0
+
+#  define mkdir(a, b)	mkdir(a)
 #endif
 
 CFile::CFile() {
@@ -54,7 +72,6 @@ bool CFile::IsDir(const CString& sLongName, bool bUseLstat) {
 	return CFile::FType(sLongName.TrimRight_n("/"),
 			FT_DIRECTORY, bUseLstat);
 }
-
 bool CFile::IsReg(const CString& sLongName, bool bUseLstat) { return CFile::FType(sLongName, FT_REGULAR, bUseLstat); }
 bool CFile::IsChr(const CString& sLongName, bool bUseLstat)  { return CFile::FType(sLongName, FT_CHARACTER, bUseLstat); }
 bool CFile::IsBlk(const CString& sLongName, bool bUseLstat)  { return CFile::FType(sLongName, FT_BLOCK, bUseLstat); }
@@ -95,10 +112,12 @@ bool CFile::FType(const CString sFileName, EFileTypes eType, bool bUseLstat) {
 			return S_ISBLK(st.st_mode);
 		case FT_FIFO:
 			return S_ISFIFO(st.st_mode);
+#ifndef _WIN32
 		case FT_LINK:
 			return S_ISLNK(st.st_mode);
 		case FT_SOCK:
 			return S_ISSOCK(st.st_mode);
+#endif
 		default:
 			break;
 	}
@@ -461,6 +480,7 @@ CString CDir::ChangeDir(const CString& sPath, const CString& sAdd, const CString
 }
 
 bool CDir::MakeDir(const CString& sPath, mode_t iMode) {
+#ifndef _WIN32
 	CString sDir;
 	VCString dirs;
 	VCString::iterator it;
@@ -490,14 +510,25 @@ bool CDir::MakeDir(const CString& sPath, mode_t iMode) {
 			if (!CFile::IsDir(sDir))
 				return false;
 		}
-
 		sDir += "/";
 	}
+#else
+	// It seems like windows accepts / instead of \ in pathnames, but it
+	// requires backslashes for drive letters (e.g. C:\).
+	// This function seems to be an exception in that it requires
+	// backslashes everywhere and thus breaks with this general rule.
+	CString sTmp = sPath.Replace_n("/", "\\");
+	int i = SHCreateDirectoryEx(NULL, sTmp.c_str(), NULL);
+	if (i != ERROR_SUCCESS) {
+		return false;
+	}
+#endif
 
 	// All went well
 	return true;
 }
 
+#ifndef _WIN32
 int CExecSock::popen2(int & iReadFD, int & iWriteFD, const CString & sCommand) {
 	int rpipes[2] = { -1, -1 };
 	int wpipes[2] = { -1, -1 };
@@ -564,3 +595,5 @@ void CExecSock::close2(int iPid, int iReadFD, int iWriteFD) {
 	}
 	return;
 }
+
+#endif // ! _WIN32
