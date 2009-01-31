@@ -60,6 +60,7 @@ public:
 	bool ChanPage(CString& sPageRet, CChan* = NULL);
 	bool DelChan(CString& sPageRet);
 	bool UserPage(CString& sPageRet, CUser* pUser = NULL);
+	bool CloneUserPage(CString& sPageRet);
 	CUser* GetNewUser(CString& sPageRet, CUser* pUser);
 
 	CString GetModArgs(const CString& sModName, bool bGlobal = false) {
@@ -434,6 +435,15 @@ bool CWebAdminSock::OnPageRequest(const CString& sURI, CString& sPageRet) {
 		if (!UserPage(sPageRet)) {
 			return false;
 		}
+	} else if (sURI == "/cloneuser") {
+		// These two checks should check for the same thing, but meh, so what?
+		if (m_pUser || !m_pSessionUser->IsAdmin()) {
+			return false;
+		}
+
+		if (!CloneUserPage(sPageRet)) {
+			return false;
+		}
 	} else if (sURI == "/edituser") {
 		if (!m_pUser) {
 			m_pUser = CZNC::Get().FindUser(GetParam("user"));
@@ -790,6 +800,37 @@ bool CWebAdminSock::DelChan(CString& sPageRet) {
 	}
 
 	Redirect("/edituser?user=" + m_pUser->GetUserName().Escape_n(CString::EURL));
+	return false;
+}
+
+bool CWebAdminSock::CloneUserPage(CString& sPageRet) {
+	CString sOldUser = GetParam("user");
+	CString sNewUser = GetParam("newuser");
+	CUser *pOldUser  = CZNC::Get().FindUser(sOldUser);
+	CString sError;
+
+	if (!pOldUser) {
+		GetErrorPage(sPageRet, "No such user");
+		return true;
+	}
+
+	// Now create the copy of that user
+	CUser *pNewUser = new CUser(sOldUser);
+	if (!pNewUser->Clone(*pOldUser, sError)) {
+		delete pNewUser;
+		GetErrorPage(sPageRet, "Error while cloning user: " + sError);
+		return true;
+	}
+	pNewUser->SetUserName(sNewUser);
+
+	if (!CZNC::Get().AddUser(pNewUser, sError)) {
+		delete pNewUser;
+		GetErrorPage(sPageRet, "Error while adding new user: " + sError);
+		return true;
+	}
+
+	Redirect("/edituser?user=" + CString(sNewUser).Escape_n(CString::EURL));
+
 	return false;
 }
 

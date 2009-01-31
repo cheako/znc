@@ -28,5 +28,18 @@
 					</tr>
 			<?ENDLOOP?>
 				</table>
+				<form action="cloneuser" method="post">
+					<p>
+						Select a user and enter a new username to clone a user.
+						TODO: Make this look better
+					</p>
+					<select name="user">
+						<? LOOP UserLoop?>
+						<option value="<? VAR Username ESC=HTML ?>"><? VAR Username ESC=HTML ?></option>
+						<? ENDLOOP ?>
+					</select>
+					<input type="text" name="newuser" value="New user name" class="half" maxlength="128" />
+					<input type="submit" value="Copy user" />
+				</form>
 		<?ENDIF?>
 <? INC Footer.tmpl ?>
