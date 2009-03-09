@@ -920,16 +920,27 @@ CString CString::ToTimeStr(unsigned long s) {
 }
 
 bool CString::ToBool() const { return (!Trim_n().Trim_n("0").empty() && !Trim_n().Equals("false")); }
-short CString::ToShort() const { return strtoul(this->c_str(), (char**) NULL, 10); }
-unsigned short CString::ToUShort() const { return strtoul(this->c_str(), (char**) NULL, 10); }
-unsigned int CString::ToUInt() const { return strtoul(this->c_str(), (char**) NULL, 10); }
-int CString::ToInt() const { return strtoul(this->c_str(), (char**) NULL, 10); }
-long CString::ToLong() const { return strtoul(this->c_str(), (char**) NULL, 10); }
-unsigned long CString::ToULong() const { return strtoul(c_str(), NULL, 10); }
-unsigned long long CString::ToULongLong() const { return strtoull(c_str(), NULL, 10); }
-long long CString::ToLongLong() const { return strtoll(c_str(), NULL, 10); }
+short CString::ToShort() const { return ToLongLong(); }
+int CString::ToInt() const { return ToLongLong(); }
+long CString::ToLong() const { return ToLongLong(); }
+unsigned short CString::ToUShort() const { return ToULongLong(); }
+unsigned int CString::ToUInt() const { return ToULongLong(); }
+unsigned long CString::ToULong() const { return ToULongLong(); }
 double CString::ToDouble() const { return strtod(c_str(), NULL); }
+long long CString::ToLongLong() const { return strtoll(c_str(), NULL, 10); }
+unsigned long long CString::ToULongLong() const {
+	// This one is easy (thanks to this the following s[0] is safe)
+	if (empty())
+		return 0;
 
+	// strtoul() allows leading + / - signs, but we don't want them because
+	// they mess stuff up :( (e.g. --makeconf's question for a port when
+	// people add a '+' when they want ssl).
+	if ((*this)[0] == '+' || (*this)[0] == '-')
+		return 0;
+
+	return strtoull(c_str(), (char**) NULL, 10);
+}
 
 bool CString::Trim(const CString& s) {
 	bool bLeft = TrimLeft(s);
