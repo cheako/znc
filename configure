@@ -2649,11 +2649,6 @@ else
 	if test "x$OPTIMIZE" = "xyes"; then
 		appendCXX -O2
 	fi
-	if test -n "$ISMINGW" ; then
-		{ { echo "$as_me:$LINENO: error: You have to use --enable-debug for mingw" >&5
-echo "$as_me: error: You have to use --enable-debug for mingw" >&2;}
-   { (exit 1); exit 1; }; }
-	fi
 fi
 
 if test "$IPV6" != "no"; then
