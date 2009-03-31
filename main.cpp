@@ -205,14 +205,15 @@ int main(int argc, char** argv) {
 		CUtils::PrintError("ZNC will start in 30 seconds.");
 		sleep(30);
 	}
-#endif
 
 	if (bForeground) {
+#endif
 		int iPid = getpid();
 		CUtils::PrintMessage("Staying open for debugging [pid: " + CString(iPid) + "]");
 
 		pZNC->WritePidFile(iPid);
 		CUtils::PrintMessage(CZNC::GetTag());
+#ifndef _WIN32
 	} else {
 		CUtils::PrintAction("Forking into the background");
 
@@ -248,7 +249,6 @@ int main(int argc, char** argv) {
 		// controlling terminal). We are independent!
 	}
 
-#ifndef _WIN32
 	struct sigaction sa;
 	sa.sa_flags = 0;
 	sigemptyset(&sa.sa_mask);
