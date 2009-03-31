@@ -19,6 +19,11 @@
 using std::vector;
 using std::map;
 
+#ifdef _WIN32
+#define uid_t int
+#define gid_t int
+#endif
+
 class CFile {
 public:
 	CFile();
