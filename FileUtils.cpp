@@ -36,6 +36,7 @@
 #  define flock(a, b)	0
 
 #  define mkdir(a, b)	mkdir(a)
+#  define fsync(a)	_commit(a)
 #endif
 
 CFile::CFile() {
