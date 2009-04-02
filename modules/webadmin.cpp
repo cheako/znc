@@ -436,8 +436,7 @@ bool CWebAdminSock::OnPageRequest(const CString& sURI, CString& sPageRet) {
 			return false;
 		}
 	} else if (sURI == "/cloneuser") {
-		// These two checks should check for the same thing, but meh, so what?
-		if (m_pUser || !m_pSessionUser->IsAdmin()) {
+		if (!IsAdmin()) {
 			return false;
 		}
 
