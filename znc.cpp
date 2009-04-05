@@ -578,11 +578,21 @@ bool CZNC::WriteConfig() {
 	m_LockFile.Sync();
 
 	// We wrote to a temporary name, move it to the right place
+#ifdef _WIN32
+	// Windows, Yay! -.-
+	m_LockFile.Close();
+#endif
+
 	if (!m_LockFile.Move(GetConfigFile(), true))
 		return false;
 
+#ifdef _WIN32
+	// Windows, still yay! -.-
+	m_LockFile.Open(GetConfigFile);
+#else
 	// Everything went fine, just need to update the saved path.
 	m_LockFile.SetFileName(GetConfigFile());
+#endif
 
 	return true;
 }

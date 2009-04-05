@@ -198,12 +198,19 @@ bool CFile::Delete(const CString& sFileName) {
 }
 
 bool CFile::Move(const CString& sOldFileName, const CString& sNewFileName, bool bOverwrite) {
+#ifdef _WIN32
+	DWORD dFlags = MOVEFILE_WRITE_THROUGH | MOVEFILE_COPY_ALLOWED;
+	if (bOverwrite)
+		dFlags |= MOVEFILE_REPLACE_EXISTING;
+
+	return MoveFileEx(sOldFileName.c_str(), sNewFileName.c_str(), dFlags) != 0;
+#else
 	if ((!bOverwrite) && (CFile::Exists(sNewFileName))) {
 		return false;
 	}
 
-	//CString sNewLongName = (sNewFileName[0] == '/') ? sNewFileName : m_sPath + "/" + sNewFileName;
 	return (rename(sOldFileName.c_str(), sNewFileName.c_str()) == 0) ? true : false;
+#endif
 }
 
 bool CFile::Copy(const CString& sOldFileName, const CString& sNewFileName, bool bOverwrite) {
