@@ -40,8 +40,9 @@ BIN_OBJS  := $(patsubst %cpp,%o,$(BIN_SRCS))
 CLEAN     := znc *.o core core.*
 DISTCLEAN := Makefile config.log config.status znc-config znc-buildmod .depend \
 	modules/.depend modules/Makefile man/Makefile znc.pc znc-uninstalled.pc $(DIST)
-DISTFILES := $(LIB_SRCS) $(BIN_SRCS) Makefile.in configure
+DISTFILES := $(LIB_SRCS) $(BIN_SRCS) Makefile.in configure configure.in install.sh
 DISTFILES += znc-config.in znc-buildmod.in znc.pc.in znc-uninstalled.pc.in *.h
+DISTFILES += config.sub config.guess
 
 ifneq "$(V)" ""
 VERBOSE=1
