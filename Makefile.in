@@ -156,4 +156,58 @@ dist: distdir
 	# Clean up behind us
 	rm -rf $(DISTDIR)
 
+# The following is heavily inspired by automake's make distcheck
+distcheck: distdir
+	mkdir $(DISTDIR)/_build
+	mkdir $(DISTDIR)/_inst
+	# Remove write access on the distdir's content, that way we catch
+	# invalid writes
+	chmod -R a-w $(DISTDIR)
+	# ...but keep our special dirs writable
+	chmod a+w $(DISTDIR)/_build $(DISTDIR)/_inst
+	# Now do a VPATH (out-of-tree) build in _build with _inst as prefix
+	# This tests if VPATH builds work fine
+	cd $(DISTDIR)/_inst && INSTDIR=$$(pwd) && cd $$INSTDIR && \
+		cd ../_build && \
+		../configure --prefix="$$INSTDIR" && \
+		$(MAKE) all
+	# We install to _inst, uninstall and check if files are left behind
+	cd $(DISTDIR)/_build && \
+		$(MAKE) install && \
+		$(MAKE) uninstall && \
+		$(MAKE) distuninstallcheck DIR=../_inst
+	# Next test: remove write access to the install directory...
+	chmod -R a-w $(DISTDIR)/_inst
+	# ... and check if DESTDIR install works
+	cd $(DISTDIR)/_build && \
+		$(MAKE) install DESTDIR=./inst_tmp && \
+		$(MAKE) uninstall DESTDIR=./inst_tmp && \
+		$(MAKE) distuninstallcheck DIR=./inst_tmp && \
+		rm -rf ./inst_tmp
+	# Yet another text: Check if we ship all the files needed for "make dist"
+	# (This also tests "make dist" in a VPATH scenario)
+	cd $(DISTDIR)/_build && make dist
+	# Now do a "distclean" and check if it leaves files behind
+	cd $(DISTDIR)/_build && make distclean
+	test $$(find $(DISTDIR)/_build -type f -print | wc -l) -lt 1 || \
+		( echo "ERROR: files left after distclean" ; exit 1 )
+	# Now test some exotic configure flags
+	cd $(DISTDIR)/_build && \
+		../configure --disable-modules --disable-openssl --disable-c-ares --disable-ipv6 && \
+		$(MAKE) all
+	# Ok, time for cleanup
+	chmod -R a+w $(DISTDIR)
+	rm -rf $(DISTDIR)
+	# If we are still here:
+	$(MAKE) dist
+	@echo
+	@echo "All tests succeeded"
+	@echo "Have fun with $(DIST)"
+
+distuninstallcheck:
+	# Now check if there are any files left behind after "make uninstall"
+	cd $(DIR) && \
+		test $$(find . -type f -print | wc -l) -lt 1 || \
+		( echo "ERROR: files left after uninstall" ; exit 1 )
+
 -include $(wildcard .depend/*.dep)
