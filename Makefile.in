@@ -27,6 +27,8 @@ INSTALL         := @INSTALL@
 INSTALL_PROGRAM := @INSTALL_PROGRAM@
 INSTALL_SCRIPT  := @INSTALL_SCRIPT@
 INSTALL_DATA    := @INSTALL_DATA@
+DISTDIR  := @DISTDIR@
+DIST     := $(DISTDIR).tar.gz
 
 LIB_SRCS  := ZNCString.cpp Csocket.cpp znc.cpp User.cpp IRCSock.cpp Client.cpp DCCBounce.cpp \
 	DCCSock.cpp Chan.cpp Nick.cpp Server.cpp Modules.cpp MD5.cpp Buffer.cpp Utils.cpp \
@@ -37,7 +39,9 @@ LIB_OBJS  := $(patsubst %cpp,%o,$(LIB_SRCS))
 BIN_OBJS  := $(patsubst %cpp,%o,$(BIN_SRCS))
 CLEAN     := znc *.o core core.*
 DISTCLEAN := Makefile config.log config.status znc-config znc-buildmod .depend \
-	modules/.depend modules/Makefile man/Makefile znc.pc znc-uninstalled.pc
+	modules/.depend modules/Makefile man/Makefile znc.pc znc-uninstalled.pc $(DIST)
+DISTFILES := $(LIB_SRCS) $(BIN_SRCS) Makefile.in configure
+DISTFILES += znc-config.in znc-buildmod.in znc.pc.in znc-uninstalled.pc.in *.h
 
 ifneq "$(V)" ""
 VERBOSE=1
@@ -137,5 +141,19 @@ uninstall:
 	rmdir $(DESTDIR)$(includedir)/znc
 	rmdir $(DESTDIR)$(PKGCONFIGDIR)
 	@echo "Successfully uninstalled, but empty directories were left behind"
+
+distdir:
+	rm -rf $(DISTDIR)
+	mkdir $(DISTDIR)
+	for file in $(DISTFILES) ; do \
+		cp $(srcdir)/$$file $(DISTDIR) || exit 1 ; \
+	done
+	@$(MAKE) -C man distdir
+	@$(MAKE) -C modules distdir
+
+dist: distdir
+	tar -chf - $(DISTDIR) | gzip --best -c > $(DIST)
+	# Clean up behind us
+	rm -rf $(DISTDIR)
 
 -include $(wildcard .depend/*.dep)

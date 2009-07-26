@@ -33,6 +33,7 @@ INSTALL         := @INSTALL@
 INSTALL_PROGRAM := @INSTALL_PROGRAM@
 INSTALL_SCRIPT  := @INSTALL_SCRIPT@
 INSTALL_DATA    := @INSTALL_DATA@
+DISTDIR  := @DISTDIR@
 
 TCL_FLAGS:= @TCL_FLAGS@
 
@@ -58,6 +59,12 @@ FILES    += $(addprefix extra/, $(notdir $(wildcard $(srcdir)/extra/*.cpp)))
 endif
 
 FILES    := $(basename $(FILES))
+
+DISTFILES := Makefile.in
+# Add the source files
+DISTFILES += $(addsuffix .cpp, $(FILES))
+# Add perl modules
+DISTFILES += $(shell echo $(srcdir)/*.pm | sed -e "s:$(srcdir)/::g")
 
 ifeq "@NOSSL@" "1"
 FILES    := $(foreach file, $(FILES), \
@@ -232,5 +239,11 @@ uninstall:
 	rm -rf $(DESTDIR)$(DATADIR)/*
 	rmdir $(DESTDIR)$(MODDIR)
 	rmdir $(DESTDIR)$(DATADIR)
+
+distdir:
+	mkdir ../$(DISTDIR)/modules
+	for file in $(DISTFILES) ; do \
+		cp $(srcdir)/$$file ../$(DISTDIR)/modules || exit 1 ; \
+	done
 
 -include $(wildcard .depend/*.dep)
