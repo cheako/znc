@@ -62,9 +62,13 @@ FILES    := $(basename $(FILES))
 
 DISTFILES := Makefile.in
 # Add the source files
-DISTFILES += $(addsuffix .cpp, $(FILES))
+DISTFILES += $(notdir $(wildcard $(srcdir)/*.cpp))
 # Add perl modules
-DISTFILES += $(shell echo $(srcdir)/*.pm | sed -e "s:$(srcdir)/::g")
+DISTFILES += $(notdir $(wildcard $(srcdir)/*.pm))
+# Add the extra/ stuff
+DISTFILES_EXTRA := $(notdir $(wildcard $(srcdir)/extra/*.cpp))
+# Add tcl stuff
+DISTFILES_EXTRA += $(notdir $(wildcard $(srcdir)/extra/*.tcl))
 
 ifeq "@NOSSL@" "1"
 FILES    := $(foreach file, $(FILES), \
@@ -242,8 +246,12 @@ uninstall:
 
 distdir:
 	mkdir ../$(DISTDIR)/modules
+	mkdir ../$(DISTDIR)/modules/extra
 	for file in $(DISTFILES) ; do \
 		cp $(srcdir)/$$file ../$(DISTDIR)/modules || exit 1 ; \
+	done
+	for file in $(DISTFILES_EXTRA) ; do \
+		cp $(srcdir)/extra/$$file ../$(DISTDIR)/modules/extra || exit 1 ; \
 	done
 
 -include $(wildcard .depend/*.dep)

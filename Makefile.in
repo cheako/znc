@@ -170,7 +170,7 @@ distcheck: distdir
 	# This tests if VPATH builds work fine
 	cd $(DISTDIR)/_inst && INSTDIR=$$(pwd) && cd $$INSTDIR && \
 		cd ../_build && \
-		../configure --prefix="$$INSTDIR" && \
+		../configure --prefix="$$INSTDIR" --enable-extra --enable-tcl --enable-sasl && \
 		$(MAKE) all
 	# We install to _inst, uninstall and check if files are left behind
 	cd $(DISTDIR)/_build && \
