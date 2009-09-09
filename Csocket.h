@@ -739,15 +739,6 @@ public:
 	virtual void SetParentSockName( const CS_STRING & sParentName );
 	const CS_STRING & GetParentSockName();
 
-	/**
-	* sets the rate at which we can send data
-	* @param iBytes the amount of bytes we can write
-	* @param iMilliseconds the amount of time we have to rate to iBytes
-	*/
-	virtual void SetRate( u_int iBytes, unsigned long long iMilliseconds );
-
-	u_int GetRateBytes();
-	unsigned long long GetRateTime();
 	//! This has a garbage collecter, and is used internall to call the jobs
 	virtual void Cron();
 
@@ -933,9 +924,6 @@ public:
 		m_bindhost.SetAFRequire( iAFRequire );
 	}
 
-	//! returns true if this socket can write its data, primarily used with rate shaping, initialize iNOW to 0 and it sets it on the first call
-	bool AllowWrite( unsigned long long & iNOW ) const;
-
 	//! returns a const reference to the crons associated to this socket
 	const std::vector<CCron *> & GetCrons() const { return( m_vcCrons ); }
 
@@ -970,8 +958,8 @@ private:
 	CS_STRING	m_sSend, m_sPemPass, m_sLocalIP, m_sRemoteIP;
 	ECloseType	m_eCloseType;
 
-	unsigned long long	m_iMaxMilliSeconds, m_iLastSendTime, m_iBytesRead, m_iBytesWritten, m_iStartTime;
-	unsigned int		m_iMaxBytes, m_iLastSend, m_iMaxStoredBufferLength, m_iTimeoutType;
+	unsigned long long	m_iBytesRead, m_iBytesWritten, m_iStartTime;
+	unsigned int		m_iMaxStoredBufferLength, m_iTimeoutType;
 
 	CSSockAddr 		m_address, m_bindhost;
 	bool			m_bIsIPv6, m_bSkipConnect;

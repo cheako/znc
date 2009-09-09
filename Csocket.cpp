@@ -573,13 +573,9 @@ void Csock::Copy( const Csock & cCopy )
 	m_sRemoteIP		= cCopy.m_sRemoteIP;
 	m_eCloseType	= cCopy.m_eCloseType;
 
-	m_iMaxMilliSeconds	= cCopy.m_iMaxMilliSeconds;
-	m_iLastSendTime		= cCopy.m_iLastSendTime;
 	m_iBytesRead		= cCopy.m_iBytesRead;
 	m_iBytesWritten		= cCopy.m_iBytesWritten;
 	m_iStartTime		= cCopy.m_iStartTime;
-	m_iMaxBytes			= cCopy.m_iMaxBytes;
-	m_iLastSend			= cCopy.m_iLastSend;
 	m_iMaxStoredBufferLength	= cCopy.m_iMaxStoredBufferLength;
 	m_iTimeoutType		= cCopy.m_iTimeoutType;
 
@@ -1116,21 +1112,6 @@ bool Csock::ConnectSSL( const CS_STRING & sBindhost )
 #endif /* HAVE_LIBSSL */
 }
 
-bool Csock::AllowWrite( unsigned long long & iNOW ) const
-{
-	if ( ( m_iMaxBytes > 0 ) && ( m_iMaxMilliSeconds > 0 ) )
-	{
-		if( iNOW == 0 )
-			iNOW = millitime();
-
-		if( m_iLastSend <  m_iMaxBytes )
-			return( true ); // allow sending if our out buffer was less than what we can send
-		if ( ( iNOW - m_iLastSendTime ) < m_iMaxMilliSeconds )
-			return( false );
-	}
-	return( true );
-}
-
 bool Csock::Write( const char *data, int len )
 {
 	m_sSend.append( data, len );
@@ -1143,45 +1124,6 @@ bool Csock::Write( const char *data, int len )
 		return( true );
 	}
 
-	// rate shaping
-	u_int iBytesToSend = 0;
-
-#ifdef HAVE_LIBSSL
-	if( m_bssl && m_sSSLBuffer.empty() && !m_bsslEstablished )
-	{
-		// to keep openssl from spinning, just initiate the connection with 1 byte so the connection establishes faster
-		iBytesToSend = 1;
-	}
-	else
-#endif /* HAVE_LIBSSL */
-	if ( ( m_iMaxBytes > 0 ) && ( m_iMaxMilliSeconds > 0 ) )
-	{
-		unsigned long long iNOW = millitime();
-		// figure out the shaping here
-		// if NOW - m_iLastSendTime > m_iMaxMilliSeconds then send a full length of ( iBytesToSend )
-		if ( ( iNOW - m_iLastSendTime ) > m_iMaxMilliSeconds )
-		{
-			m_iLastSendTime = iNOW;
-			iBytesToSend = m_iMaxBytes;
-			m_iLastSend = 0;
-
-		} else // otherwise send m_iMaxBytes - m_iLastSend
-			iBytesToSend = m_iMaxBytes - m_iLastSend;
-
-		// take which ever is lesser
-		if ( m_sSend.length() < iBytesToSend )
-			iBytesToSend = 	m_sSend.length();
-
-		// add up the bytes sent
-		m_iLastSend += iBytesToSend;
-
-		// so, are we ready to send anything ?
-		if ( iBytesToSend == 0 )
-			return( true );
-
-	} else
-		iBytesToSend = m_sSend.length();
-
 #warning TODO this will cause spinning if the ev_io isnt properly started / stopped :(
 
 #ifdef HAVE_LIBSSL
@@ -1189,7 +1131,7 @@ bool Csock::Write( const char *data, int len )
 	{
 
 		if ( m_sSSLBuffer.empty() ) // on retrying to write data, ssl wants the data in the SAME spot and the SAME size
-			m_sSSLBuffer.append( m_sSend.data(), iBytesToSend );
+			m_sSSLBuffer.append( m_sSend.data(), m_sSend.length());
 
 		int iErr = SSL_write( m_ssl, m_sSSLBuffer.data(), m_sSSLBuffer.length() );
 
@@ -1246,9 +1188,9 @@ bool Csock::Write( const char *data, int len )
 #endif /* HAVE_LIBSSL */
 	{
 #ifdef _WIN32
-		int bytes = send( GetWSock(), m_sSend.data(), iBytesToSend, 0 );
+		int bytes = send(GetWSock(), m_sSend.data(), m_sSend.length(), 0);
 #else
-		int bytes = write( GetWSock(), m_sSend.data(), iBytesToSend );
+		int bytes = write(GetWSock(), m_sSend.data(), m_sSend.length());
 #endif /* _WIN32 */
 
 		if ( ( bytes == -1 ) && ( GetSockError() == ECONNREFUSED ) )
@@ -1801,15 +1743,6 @@ void Csock::SetRequiresClientCert( bool bRequiresCert ) { m_iRequireClientCertFl
 void Csock::SetParentSockName( const CS_STRING & sParentName ) { m_sParentName = sParentName; }
 const CS_STRING & Csock::GetParentSockName() { return( m_sParentName ); }
 
-void Csock::SetRate( u_int iBytes, unsigned long long iMilliseconds )
-{
-	m_iMaxBytes = iBytes;
-	m_iMaxMilliSeconds = iMilliseconds;
-}
-
-u_int Csock::GetRateBytes() { return( m_iMaxBytes ); }
-unsigned long long Csock::GetRateTime() { return( m_iMaxMilliSeconds ); }
-
 void Csock::Cron()
 {
 	for( vector<CCron *>::size_type a = 0; a < m_vcCrons.size(); a++ )
@@ -2056,10 +1989,6 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 	m_eCloseType = CLT_DONT;
 	m_iMethod = SSL23;
 	m_sCipherType = "ALL";
-	m_iMaxBytes = 0;
-	m_iMaxMilliSeconds = 0;
-	m_iLastSendTime = 0;
-	m_iLastSend = 0;
 	m_bFullsslAccept = false;
 	m_bsslEstablished = false;
 	m_bEnableReadLine = false;
@@ -2151,13 +2080,12 @@ void Csock::DoAccept()
 	{
 		// set the name of the listener
 		NewpcSock->SetParentSockName( GetSockName() );
-		NewpcSock->SetRate( GetRateBytes(), GetRateTime() );
 		if ( NewpcSock->GetSockName().empty() )
 		{
 			std::stringstream s;
 			s << sHost << ":" << port;
 			m_Manager->AddSock( NewpcSock,  s.str() );
-
+#warning this m_Manager pointer is FRAGILE! :(
 		} else
 			m_Manager->AddSock( NewpcSock, NewpcSock->GetSockName() );
 	} else
