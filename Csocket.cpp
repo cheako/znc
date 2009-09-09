@@ -527,6 +527,7 @@ Csock::~Csock()
 
 	ev_io_stop(EV_DEFAULT_UC_ &m_read_io);
 	ev_io_stop(EV_DEFAULT_UC_ &m_write_io);
+	ev_timer_stop(EV_DEFAULT_UC_ &m_io_timeout);
 }
 
 void Csock::Dereference()
@@ -548,11 +549,9 @@ void Csock::Copy( const Csock & cCopy )
 	SetWSock(cCopy.GetWSock());
 
 	m_iTcount		= cCopy.m_iTcount;
-	m_iLastCheckTimeoutTime	=	cCopy.m_iLastCheckTimeoutTime;
-	m_iport 		= cCopy.m_iport;
+	m_iport			= cCopy.m_iport;
 	m_iRemotePort	= cCopy.m_iRemotePort;
 	m_iLocalPort	= cCopy.m_iLocalPort;
-	m_itimeout		= cCopy.m_itimeout;
 	m_iConnType		= cCopy.m_iConnType;
 	m_iMethod		= cCopy.m_iMethod;
 	m_bssl			= cCopy.m_bssl;
@@ -577,7 +576,8 @@ void Csock::Copy( const Csock & cCopy )
 	m_iBytesWritten		= cCopy.m_iBytesWritten;
 	m_iStartTime		= cCopy.m_iStartTime;
 	m_iMaxStoredBufferLength	= cCopy.m_iMaxStoredBufferLength;
-	m_iTimeoutType		= cCopy.m_iTimeoutType;
+
+	SetTimeout(cCopy.GetTimeout(), cCopy.GetTimeoutType());
 
 	m_address			= cCopy.m_address;
 	m_bindhost			= cCopy.m_bindhost;
@@ -759,7 +759,7 @@ bool Csock::Connect( const CS_STRING & sBindHost, bool bSkipSetup )
 bool Csock::Listen( u_short iPort, int iMaxConns, const CS_STRING & sBindHost, u_int iTimeout )
 {
 	m_iConnType = LISTENER;
-	m_itimeout = iTimeout;
+	SetTimeout(iTimeout, GetTimeoutType());
 
 	m_sBindHost = sBindHost;
 	if ( !sBindHost.empty() )
@@ -1117,14 +1117,13 @@ bool Csock::Write( const char *data, int len )
 	m_sSend.append( data, len );
 
 	if (m_eConState != CST_OK)
+#warning TODO this will cause spinning if the ev_io isnt properly started / stopped :(
 		return( true );
 
 	if (m_sSend.empty()) {
 		ev_io_stop(EV_DEFAULT_UC_ &m_write_io);
 		return( true );
 	}
-
-#warning TODO this will cause spinning if the ev_io isnt properly started / stopped :(
 
 #ifdef HAVE_LIBSSL
 	if ( m_bssl )
@@ -1375,7 +1374,7 @@ void Csock::SetSock( int iSock ) { SetWSock(iSock); SetRSock(iSock); }
 int Csock::GetRSock() const { return( m_read_io.fd ); }
 int Csock::GetWSock() const { return( m_write_io.fd ); }
 int Csock::GetSock() const { return( GetRSock() ); }
-void Csock::ResetTimer() { m_iLastCheckTimeoutTime = 0; m_iTcount = 0; }
+void Csock::ResetTimer() { ev_timer_again(EV_DEFAULT_UC_ &m_io_timeout); }
 void Csock::PauseRead() { m_bPauseRead = true; ev_io_stop(EV_DEFAULT_UC_ &m_read_io); }
 bool Csock::IsReadPaused() { return( m_bPauseRead ); }
 
@@ -1390,56 +1389,30 @@ void Csock::UnPauseRead()
 void Csock::SetTimeout( int iTimeout, u_int iTimeoutType )
 {
 	m_iTimeoutType = iTimeoutType;
-	m_itimeout = iTimeout;
+	m_io_timeout.repeat = iTimeout;
+	ResetTimer();
 }
 
 void Csock::SetTimeoutType( u_int iTimeoutType ) { m_iTimeoutType = iTimeoutType; }
-int Csock::GetTimeout() const { return m_itimeout; }
+int Csock::GetTimeout() const { return m_io_timeout.repeat; }
 u_int Csock::GetTimeoutType() const { return( m_iTimeoutType ); }
 
-bool Csock::CheckTimeout( time_t iNow )
+void Csock::CheckTimeout(EV_P_ ev_timer *timeout, int revents)
 {
-	if( m_iLastCheckTimeoutTime == 0 )
-	{
-		m_iLastCheckTimeoutTime = iNow;
-		return( false );
+	Csock *pSock = (Csock *) timeout->data;
+
+	if (pSock->GetConState() != CST_OK) {
+		// Not yet connected so won't time out
+		pSock->ResetTimer();
+		return;
 	}
 
-	if ( IsReadPaused() )
-		return( false );
+	if (pSock->IsReadPaused())
+		// UnPauseRead() will ResetTimer()
+		return;
 
-	time_t iDiff = 0;
-	if( iNow > m_iLastCheckTimeoutTime )
-		iDiff = iNow - m_iLastCheckTimeoutTime;
-	else
-	{
-		// this is weird, but its possible if someone changes a clock and it went back in time, this essentially has to reset the last check
-		// the worst case scenario is the timeout is about to it and the clock changes, it would then cause
-		// this to pass over the last half the time
-		m_iLastCheckTimeoutTime = iNow;
-	}
-
-	if ( m_itimeout > 0 )
-	{
-		// this is basically to help stop a clock adjust ahead, stuff could reset immediatly on a clock jump
-		// otherwise
-		time_t iRealTimeout = m_itimeout;
-		if( iRealTimeout <= 1 )
-			m_iTcount++;
-		else if( m_iTcount == 0 )
-			iRealTimeout /= 2;
-		if( iDiff >= iRealTimeout )
-		{
-			if( m_iTcount == 0 )
-				m_iLastCheckTimeoutTime = iNow - iRealTimeout;
-			if( m_iTcount++ >= 1 )
-			{
-				Timeout();
-				return( true );
-			}
-		}
-	}
-	return( false );
+	pSock->Timeout();
+	pSock->Close(CLT_NOW);
 }
 
 void Csock::PushBuff( const char *data, int len, bool bStartAtZero )
@@ -1970,8 +1943,12 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 {
 	ev_io_init(&m_read_io, EventCallback, -1, EV_READ);
 	ev_io_init(&m_write_io, EventCallback, -1, EV_WRITE);
+	ev_timer_init(&m_io_timeout, CheckTimeout, itimeout, itimeout);
 	m_read_io.data = this;
 	m_write_io.data = this;
+	m_io_timeout.data = this;
+
+	ev_timer_start(EV_DEFAULT_UC_ &m_io_timeout);
 
 #ifdef HAVE_LIBSSL
 	m_ssl = NULL;
@@ -1980,7 +1957,6 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 #endif /* HAVE_LIBSSL */
 	m_iTcount = 0;
 	SetSock(-1);
-	m_itimeout = itimeout;
 	m_bssl = false;
 	m_bIsConnected = false;
 	m_iport = iport;
@@ -2006,7 +1982,6 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 	m_iCurBindCount = 0;
 	m_bIsIPv6 = false;
 	m_bSkipConnect = false;
-	m_iLastCheckTimeoutTime = 0;
 }
 
 void Csock::EventCallback(EV_P_ ev_io *io, int revents)

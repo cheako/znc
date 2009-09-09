@@ -608,8 +608,8 @@ public:
 	int GetTimeout() const;
 	u_int GetTimeoutType() const;
 
-	//! returns true if the socket has timed out
-	virtual bool CheckTimeout( time_t iNow );
+	//! closes the socket if it has timed out
+	static void CheckTimeout(EV_P_ ev_timer *timeout, int revents);
 
 	/**
 	* pushes data up on the buffer, if a line is ready
@@ -858,11 +858,17 @@ public:
 	//! return how long it has been (in seconds) since the last read or successful write
 	int GetTimeSinceLastDataTransaction( time_t iNow = 0 )
 	{
-		if( m_iLastCheckTimeoutTime == 0 )
-			return( 0 );
-		return( ( iNow > 0 ? iNow : time( NULL ) ) - m_iLastCheckTimeoutTime );
+		ev_tstamp time_left = ev_timer_remaining(EV_DEFAULT_UC_ &m_io_timeout);
+
+		// If it will fire in 3s and timeout is 10s, then obviously the
+		// timeout was last reset 7s ago.
+		ev_tstamp last = GetTimeout() - time_left;
+
+		// Just to be safe
+		if (last < 0)
+			return 0;
+		return last;
 	}
-	time_t GetLastCheckTimeout() { return( m_iLastCheckTimeoutTime ); }
 
 	//! return the data imediatly ready for read
 	virtual int GetPending();
@@ -948,10 +954,11 @@ private:
 	void DoRead();
 
 	ev_io	m_read_io, m_write_io;
+	ev_timer m_io_timeout;
 
 	// NOTE! if you add any new members, be sure to add them to Copy()
 	u_short		m_iport, m_iRemotePort, m_iLocalPort;
-	int			m_itimeout, m_iConnType, m_iMethod, m_iTcount;
+	int			m_iConnType, m_iMethod, m_iTcount;
 	bool		m_bssl, m_bIsConnected, m_bFullsslAccept;
 	bool		m_bsslEstablished, m_bEnableReadLine, m_bPauseRead;
 	CS_STRING	m_shostname, m_sbuffer, m_sSockName, m_sPemFile, m_sCipherType, m_sParentName;
@@ -963,7 +970,6 @@ private:
 
 	CSSockAddr 		m_address, m_bindhost;
 	bool			m_bIsIPv6, m_bSkipConnect;
-	time_t			m_iLastCheckTimeoutTime;
 
 #ifdef HAVE_LIBSSL
 	CS_STRING			m_sSSLBuffer;
@@ -1339,6 +1345,7 @@ public:
 
 	void Prepare()
 	{
+#warning sloooow :(
 		for( u_int a = 0; a < this->size(); a++ )
 		{
 			T *pcSock = (*this)[a];
@@ -1409,6 +1416,7 @@ public:
 		}
 
 		unsigned long long iMilliNow = millitime();
+#warning what if we force-close a socket and then sleep for a while?
 		if ( ( iMilliNow - m_iCallTimeouts ) >= 1000 )
 		{
 			m_iCallTimeouts = iMilliNow;
@@ -1420,19 +1428,10 @@ public:
 				Csock::ECloseType eCloseType = pSock->GetCloseType();
 				if( eCloseType == T::CLT_NOW || eCloseType == T::CLT_DEREFERENCE ||
 						( eCloseType == T::CLT_AFTERWRITE && pSock->GetWriteBuffer().empty() ) ) {
-#warning this should be a check handler :(
 					DelSock( i-- ); // close any socks that have requested it
 					continue;
 				} else
 					pSock->Cron(); // call the Cron handler here
-
-				if ( pSock->GetConState() != T::CST_OK )
-					continue;
-
-				if ( pSock->CheckTimeout( iMilliNow / 1000 ) ) {
-					DelSock( i-- );
-					continue;
-				}
 			}
 
 			// run any Manager Crons we may have
