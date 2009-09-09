@@ -26,11 +26,6 @@ namespace
 }
 
 CZNC::CZNC() {
-	if (!InitCsocket()) {
-		CUtils::PrintError("Could not initialize Csocket!");
-		exit(-1);
-	}
-
 #ifdef _MODULES
 	m_pModules = new CGlobalModules();
 #endif
@@ -41,7 +36,6 @@ CZNC::CZNC() {
 	m_uBytesRead = 0;
 	m_uBytesWritten = 0;
 	m_pConnectUserTimer = NULL;
-	m_bNeedRehash = false;
 	m_TimeStarted = time(NULL);
 }
 
@@ -74,7 +68,6 @@ CZNC::~CZNC() {
 	delete m_pModules;
 #endif
 
-	ShutdownCsocket();
 	DeletePidFile();
 }
 
@@ -216,31 +209,37 @@ bool CZNC::HandleUserDeletion()
 	return true;
 }
 
-void CZNC::Loop() {
-	while (true) {
-		CString sError;
-
-		if (GetNeedRehash()) {
-			SetNeedRehash(false);
-
-			if (RehashConfig(sError)) {
-				Broadcast("Rehashing succeeded", true);
-			} else {
-				Broadcast("Rehashing failed: " + sError, true);
-				Broadcast("ZNC is in some possibly inconsistent state!", true);
-			}
-		}
-
-		// Check for users that need to be deleted
-		if (HandleUserDeletion()) {
-			// Also remove those user(s) from the config file
-			WriteConfig();
-		}
-
-		// Csocket wants micro seconds
-		// 500 msec to 600 sec
-		m_Manager.DynamicSelectLoop(500 * 1000, 600 * 1000 * 1000);
+void CZNC::LoopPrepareUsers(EV_P_ ev_prepare *, int) {
+	// Check for users that need to be deleted
+	if (CZNC::Get().HandleUserDeletion()) {
+		// Also remove those user(s) from the config file
+		CZNC::Get().WriteConfig();
 	}
+}
+
+void CZNC::HandleSIGHUP(EV_P_ ev_signal *, int) {
+	CString sError;
+
+	CUtils::PrintMessage("Caught SIGHUP");
+	if (CZNC::Get().RehashConfig(sError)) {
+		CZNC::Get().Broadcast("Rehashing succeeded", true);
+	} else {
+		CZNC::Get().Broadcast("Rehashing failed: " + sError, true);
+		CZNC::Get().Broadcast("ZNC is in some possibly inconsistent state!", true);
+	}
+}
+
+void CZNC::LoopPrepare() {
+	ev_prepare_init(&m_prepare, LoopPrepareUsers);
+	ev_prepare_start(EV_DEFAULT_UC_ &m_prepare);
+
+	ev_signal_init(&m_signal, HandleSIGHUP, SIGHUP);
+	ev_signal_start(EV_DEFAULT_UC_ &m_signal);
+}
+
+void CZNC::LoopCleanup() {
+	ev_prepare_stop(EV_DEFAULT_UC_ &m_prepare);
+	ev_signal_stop(EV_DEFAULT_UC_ &m_signal);
 }
 
 bool CZNC::WriteISpoof(CUser* pUser) {
@@ -1789,10 +1788,9 @@ class CConnectUserTimer : public CCron {
 public:
 	CConnectUserTimer(int iSecs) : CCron() {
 		SetName("Connect users");
-		Start(iSecs);
-		m_uiPosNextUser = 0;
 		// Don't wait iSecs seconds for first timer run
-		m_bRunOnNextCall = true;
+		Start(iSecs, true);
+		m_uiPosNextUser = 0;
 	}
 	virtual ~CConnectUserTimer() {
 		// This is only needed when ZNC shuts down:

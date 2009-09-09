@@ -100,14 +100,11 @@ public:
 	}
 
 	unsigned int GetAnonConnectionCount(const CString &sIP) const;
-private:
-protected:
-#ifdef HAVE_ARES
-	int Select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
 
 private:
-	using TSocketManager<CZNCSock>::Select;
-#endif /* HAVE_ARES */
+#ifdef HAVE_ARES
+	static void SocketReadyCallback(EV_P_ ev_io *sock, int revents);
+#endif
 };
 
 #endif /* SOCKET_H */

@@ -54,12 +54,8 @@ static void die(int sig) {
 #endif /* _DEBUG */
 
 	delete &CZNC::Get();
+	ShutdownCsocket();
 	exit(sig);
-}
-
-static void rehash(int sig) {
-	CUtils::PrintMessage("Caught SIGHUP");
-	CZNC::Get().SetNeedRehash(true);
 }
 
 static bool isRoot() {
@@ -135,6 +131,11 @@ int main(int argc, char** argv) {
 
 	if (optind < argc) {
 		sConfig = argv[optind];
+	}
+
+	if (!InitCsocket()) {
+		CUtils::PrintError("Could not initialize Csocket!");
+		return 1;
 	}
 
 	CZNC* pZNC = &CZNC::Get();
@@ -237,11 +238,10 @@ int main(int argc, char** argv) {
 	sa.sa_flags = 0;
 	sigemptyset(&sa.sa_mask);
 
+	// SIGHUP is handled in CZNC::LoopPrepare() / LoopCleanup()
+
 	sa.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &sa, (struct sigaction*) NULL);
-
-	sa.sa_handler = rehash;
-	sigaction(SIGHUP,  &sa, (struct sigaction*) NULL);
 
 	// Once this signal is caught, the signal handler is reset
 	// to SIG_DFL. This avoids endless loop with signals.
@@ -257,8 +257,11 @@ int main(int argc, char** argv) {
 	int iRet = 0;
 
 	try {
-		pZNC->Loop();
+		pZNC->LoopPrepare();
+		pZNC->GetManager().Loop();
 	} catch (CException e) {
+		pZNC->LoopCleanup();
+
 		switch (e.GetType()) {
 			case CException::EX_Shutdown:
 				iRet = 0;
@@ -297,6 +300,7 @@ int main(int argc, char** argv) {
 	}
 
 	delete pZNC;
+	ShutdownCsocket();
 
 	return iRet;
 }

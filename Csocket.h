@@ -85,6 +85,8 @@
 #include <set>
 #include <map>
 
+#include <ev.h>
+
 #include "defines.h" // require this as a general rule, most projects have a defines.h or the like
 
 #ifndef CS_STRING
@@ -224,6 +226,20 @@ private:
 
 class Csock;
 
+class CSocketManagerBase
+{
+public:
+	CSocketManagerBase ()
+	{
+	}
+
+	virtual ~CSocketManagerBase()
+	{
+	}
+
+	virtual void AddSock(Csock *pcSock, const CS_STRING & sSockName) = 0;
+};
+
 /**
  * @brief this function is a wrapper around gethostbyname and getaddrinfo (for ipv6)
  *
@@ -334,10 +350,7 @@ class CCron
 {
 public:
 	CCron();
-	virtual ~CCron() {}
-
-	//! This is used by the Job Manager, and not you directly
-	void run( time_t & iNow );
+	virtual ~CCron();
 
 	/**
 	 * @param TimeSequence	how often to run in seconds
@@ -346,16 +359,10 @@ public:
 	void StartMaxCycles( int TimeSequence, u_int iMaxCycles );
 
 	//! starts and runs infinity amount of times
-	void Start( int TimeSequence );
+	void Start( int TimeSequence, bool bFirstCall = false );
 
 	//! call this to turn off your cron, it will be removed
 	void Stop();
-
-	//! pauses excution of your code in RunJob
-	void Pause();
-
-	//! removes the pause on RunJon
-	void UnPause();
 
 	int GetInterval() const;
 	u_int GetMaxCycles() const;
@@ -367,21 +374,15 @@ public:
 	const CS_STRING & GetName() const;
 	void SetName( const CS_STRING & sName );
 
-	//! returns the timestamp of the next estimated run time. Note that it may not run at this EXACT time, but it will run at least at this time or after
-	time_t GetNextRun() const { return( m_iTime ); }
-
 public:
 
 	//! this is the method you should override
-	virtual void RunJob();
-
-protected:
-	bool		m_bRunOnNextCall; //!< if set to true, RunJob() gets called on next invocation of run() despite the timeout
+	virtual void RunJob() = 0;
 
 private:
-	time_t		m_iTime;
-	bool		m_bActive, m_bPause;
-	int			m_iTimeSequence;
+	static void TimerCallback(EV_P_ ev_timer *timer, int revents);
+
+	ev_timer	m_timer;
 	u_int		m_iMaxCycles, m_iCycles;
 	CS_STRING	m_sName;
 };
@@ -499,18 +500,6 @@ public:
 	virtual bool Connect( const CS_STRING & sBindHost = "", bool bSkipSetup = false );
 
 	/**
-	* WriteSelect on this socket
-	* Only good if JUST using this socket, otherwise use the TSocketManager
-	*/
-	virtual int WriteSelect();
-
-	/**
-	* ReadSelect on this socket
-	* Only good if JUST using this socket, otherwise use the TSocketManager
-	*/
-	virtual int ReadSelect();
-
-	/**
 	* Listens for connections
 	*
 	* @param iPort the port to listen on
@@ -583,14 +572,13 @@ public:
 	//! Sets the sock, telling it its connected (internal use only)
 	virtual void SetIsConnected( bool b );
 
-	//! returns a reference to the sock
-	int & GetRSock();
+	int GetRSock() const;
 	void SetRSock( int iSock );
-	int & GetWSock();
+	int GetWSock() const;
 	void SetWSock( int iSock );
 
 	void SetSock( int iSock );
-	int & GetSock();
+	int GetSock() const;
 
 	//! resets the time counter, this is virtual in the event you need an event on the timer being Reset
 	virtual void ResetTimer();
@@ -690,12 +678,6 @@ public:
 	ECloseType GetCloseType() { return( m_eCloseType ); }
 	bool IsClosed() { return( GetCloseType() != CLT_DONT ); }
 
-	//! Set rather to NON Blocking IO on this socket, default is true
-	void BlockIO( bool bBLOCK );
-
-	//! Use this to change your fd's to blocking or none blocking
-	void NonBlockingIO();
-
 	//! if this connection type is ssl or not
 	bool GetSSL();
 	void SetSSL( bool b );
@@ -727,7 +709,6 @@ public:
 
 	//! Get the send buffer
 	const CS_STRING & GetWriteBuffer();
-	void ClearWriteBuffer();
 
 	//! is SSL_accept finished ?
 	bool FullSSLAccept();
@@ -905,12 +886,14 @@ public:
 	//! grabs fd's for the sockets
 	bool CreateSocksFD()
 	{
-		if( m_iReadSock != -1 )
+		if( GetRSock() != -1 )
 			return( true );
 
-		m_iReadSock = m_iWriteSock = SOCKET();
-		if ( m_iReadSock == -1 )
+		SetRSock(SOCKET());
+		if ( GetRSock() == -1 )
 			return( false );
+
+		SetWSock(GetRSock());
 
 		m_address.SinFamily();
 		m_address.SinPort( m_iport );
@@ -966,14 +949,31 @@ public:
 	 */
 	virtual int GetAddrInfo( const CS_STRING & sHostname, CSSockAddr & csSockAddr );
 
+	void SetManager(CSocketManagerBase *Manager) { m_Manager = Manager; }
+
 private:
 	//! making private for safety
 	Csock( const Csock & cCopy ) {}
 
+	void DoReadSelect();
+	void DoAccept();
+	void DoRead();
+
+	static void EventCallback(EV_P_ ev_io *io, int revents)
+	{
+		Csock *pSock = (Csock *) io->data;
+		if (revents & EV_WRITE)
+			pSock->Write("");
+		if (revents & EV_READ)
+			pSock->DoReadSelect();
+	}
+
+	ev_io	m_read_io, m_write_io;
+
 	// NOTE! if you add any new members, be sure to add them to Copy()
 	u_short		m_iport, m_iRemotePort, m_iLocalPort;
-	int			m_iReadSock, m_iWriteSock, m_itimeout, m_iConnType, m_iMethod, m_iTcount;
-	bool		m_bssl, m_bIsConnected, m_bBLOCK, m_bFullsslAccept;
+	int			m_itimeout, m_iConnType, m_iMethod, m_iTcount;
+	bool		m_bssl, m_bIsConnected, m_bFullsslAccept;
 	bool		m_bsslEstablished, m_bEnableReadLine, m_bPauseRead;
 	CS_STRING	m_shostname, m_sbuffer, m_sSockName, m_sPemFile, m_sCipherType, m_sParentName;
 	CS_STRING	m_sSend, m_sPemPass, m_sLocalIP, m_sRemoteIP;
@@ -1011,6 +1011,7 @@ private:
 	CS_STRING		m_sBindHost;
 	u_int			m_iCurBindCount, m_iDNSTryCount;
 
+	CSocketManagerBase*	m_Manager;
 };
 
 /**
@@ -1215,34 +1216,33 @@ public:
 */
 
 template<class T>
-class TSocketManager : public std::vector<T *>
+class TSocketManager : protected CSocketManagerBase, public std::vector<T *>
 {
 public:
-	TSocketManager() : std::vector<T *>()
+	TSocketManager() : CSocketManagerBase(), std::vector<T *>()
 	{
-		m_errno = SUCCESS;
 		m_iCallTimeouts = millitime();
-		m_iSelectWait = 100000; // Default of 100 milliseconds
+
+		m_prepare.data = this;
+		ev_prepare_init(&m_prepare, Prepare);
+		ev_prepare_start(EV_DEFAULT_UC_ &m_prepare);
 	}
 
 	virtual ~TSocketManager()
 	{
 		Cleanup();
-	}
-
-	void clear()
-	{
-		while ( this->size() )
-			DelSock( 0 );
+		ev_prepare_stop(EV_DEFAULT_UC_ &m_prepare);
 	}
 
 	virtual void Cleanup()
 	{
+		while ( this->size() )
+			DelSock( 0 );
+
 		for( u_int a = 0; a < m_vcCrons.size(); a++ )
 			CS_Delete( m_vcCrons[a] );
 
 		m_vcCrons.clear();
-		clear();
 	}
 
 	enum EMessages
@@ -1275,9 +1275,6 @@ public:
 		if( cCon.GetAFRequire() != CSSockAddr::RAF_ANY )
 			pcSock->SetAFRequire( cCon.GetAFRequire() );
 
-		// make it NON-Blocking IO
-		pcSock->BlockIO( false );
-
 		// bind the vhost
 		pcSock->SetBindHost( cCon.GetBindHost() );
 
@@ -1307,7 +1304,6 @@ public:
 		if ( !pcSock )
 			pcSock = new T();
 
-		pcSock->BlockIO( false );
 		if( cListen.GetAFRequire() != CSSockAddr::RAF_ANY )
 		{
 			pcSock->SetAFRequire( cListen.GetAFRequire() );
@@ -1356,12 +1352,13 @@ public:
 	}
 
 
-	/**
-	* Best place to call this class for running, all the call backs are called.
-	* You should through this in your main while loop (long as its not blocking)
-	* all the events are called as needed.
-	*/
-	virtual void Loop()
+	static void Prepare(EV_P_ ev_prepare *prep, int revents)
+	{
+		TSocketManager *p = (TSocketManager *) prep->data;
+		p->Prepare();
+	}
+
+	void Prepare()
 	{
 		for( u_int a = 0; a < this->size(); a++ )
 		{
@@ -1432,96 +1429,6 @@ public:
 #endif /* HAVE_LIBSSL */
 		}
 
-		std::map<T *, EMessages> mpeSocks;
-		Select( mpeSocks );
-
-		switch( m_errno )
-		{
-			case SUCCESS:
-			{
-				for( typename std::map<T *, EMessages>::iterator itSock = mpeSocks.begin(); itSock != mpeSocks.end(); itSock++ )
-				{
-					T * pcSock = itSock->first;
-					EMessages iErrno = itSock->second;
-
-					if ( iErrno == SUCCESS )
-					{
-						// read in data
-						// if this is a
-						int iLen = 0;
-
-						if ( pcSock->GetSSL() )
-							iLen = pcSock->GetPending();
-
-						if ( iLen <= 0 )
-							iLen = CS_BLOCKSIZE;
-
-						CSCharBuffer cBuff( iLen );
-
-						int bytes = pcSock->Read( cBuff(), iLen );
-
-						if ( ( bytes != T::READ_TIMEDOUT ) && ( bytes != T::READ_CONNREFUSED )
-							&& ( !pcSock->IsConnected() ) )
-						{
-							pcSock->SetIsConnected( true );
-							pcSock->Connected();
-						}
-
-						switch( bytes )
-						{
-							case T::READ_EOF:
-							{
-								DelSockByAddr( pcSock );
-								break;
-							}
-
-							case T::READ_ERR:
-							{
-								pcSock->SockError( GetSockError() );
-								DelSockByAddr( pcSock );
-								break;
-							}
-
-							case T::READ_EAGAIN:
-								break;
-
-							case T::READ_CONNREFUSED:
-								pcSock->ConnectionRefused();
-								DelSockByAddr( pcSock );
-								break;
-
-							case T::READ_TIMEDOUT:
-								pcSock->Timeout();
-								DelSockByAddr( pcSock );
-								break;
-
-							default:
-							{
-								if ( T::TMO_READ & pcSock->GetTimeoutType() )
-									pcSock->ResetTimer();	// reset the timeout timer
-
-								pcSock->ReadData( cBuff(), bytes );	// Call ReadData() before PushBuff() so that it is called before the ReadLine() event - LD  07/18/05
-								pcSock->PushBuff( cBuff(), bytes );
-								break;
-							}
-						}
-
-					} else if ( iErrno == SELECT_ERROR )
-					{
-						// a socket came back with an error
-						// usually means it was closed
-						DelSockByAddr( pcSock );
-					}
-				}
-				break;
-			}
-
-			case SELECT_TIMEOUT:
-			case SELECT_ERROR:
-			default	:
-				break;
-		}
-
 		unsigned long long iMilliNow = millitime();
 		if ( ( iMilliNow - m_iCallTimeouts ) >= 1000 )
 		{
@@ -1529,46 +1436,34 @@ public:
 			// call timeout on all the sockets that recieved no data
 			for( unsigned int i = 0; i < this->size(); i++ )
 			{
-				if ( (*this)[i]->GetConState() != T::CST_OK )
+				Csock *pSock = (*this)[i];
+
+				Csock::ECloseType eCloseType = pSock->GetCloseType();
+				if( eCloseType == T::CLT_NOW || eCloseType == T::CLT_DEREFERENCE ||
+						( eCloseType == T::CLT_AFTERWRITE && pSock->GetWriteBuffer().empty() ) ) {
+#warning this should be a check handler :(
+					DelSock( i-- ); // close any socks that have requested it
+					continue;
+				} else
+					pSock->Cron(); // call the Cron handler here
+
+				if ( pSock->GetConState() != T::CST_OK )
 					continue;
 
-				if ( (*this)[i]->CheckTimeout( iMilliNow / 1000 ) )
+				if ( pSock->CheckTimeout( iMilliNow / 1000 ) ) {
 					DelSock( i-- );
+					continue;
+				}
 			}
+
+			// run any Manager Crons we may have
+			Cron();
 		}
-		// run any Manager Crons we may have
-		Cron();
 	}
 
-	/**
-	 * @brief this is similar to loop, except that it dynamically adjusts the select time based on jobs and timeouts in sockets
-	 *
-	 *	- This type of behavior only works well in a scenario where there is low traffic. If you use this then its because you
-	 *	- are trying to spare yourself some of those idle loops where nothing is done. If you try to use this code where you have lots of
-	 *	- connections and/or lots of traffic you might end up causing more CPU usage than just a plain Loop() with a static sleep of 500ms
-	 *	- its a trade off at some point, and you'll probably find out that the vast majority of the time and in most cases Loop() works fine
-	 *	- by itself. I've tried to mitigate that as much as possible by not having it change the select if the previous call to select
-	 *	- was not a timeout. Anyways .... Caveat Emptor.
-	 *	- Sample useage is cFoo.DynamicSelectLoop( 500000, 5000000 ); which basically says min of 500ms and max of 5s
-	 *
-	 * @param iLowerBounds the lower bounds to use in MICROSECONDS
-	 * @param iUpperBounds the upper bounds to use in MICROSECONDS
-	 * @param iMaxResolution the maximum time to calculate overall in seconds
-	 */
-	void DynamicSelectLoop( u_long iLowerBounds, u_long iUpperBounds, time_t iMaxResolution = 3600 )
+	void AddSock(Csock *pcSock, const CS_STRING & sSockName)
 	{
-		SetSelectTimeout( iLowerBounds );
-		if( m_errno == SELECT_TIMEOUT )
-		{ // only do this if the previous call to select was a timeout
-			time_t iNow = time( NULL );
-			u_long iSelectTimeout = GetDynamicSleepTime( iNow, iMaxResolution );
-			iSelectTimeout *= 1000000;
-			iSelectTimeout = std::max( iLowerBounds, iSelectTimeout );
-			iSelectTimeout = std::min( iSelectTimeout, iUpperBounds );
-			if( iLowerBounds != iSelectTimeout )
-				SetSelectTimeout( iSelectTimeout );
-		}
-		Loop();
+		AddSock((T *) pcSock, sSockName);
 	}
 
 	/**
@@ -1579,6 +1474,7 @@ public:
 	{
 		pcSock->SetSockName( sSockName );
 		push_back( pcSock );
+		pcSock->SetManager(this);
 	}
 
 	//! returns a pointer to the FIRST sock found by port or NULL on no match
@@ -1648,9 +1544,6 @@ public:
 		return( vpSocks );
 	}
 
-	//! return the last known error as set by this class
-	int GetErrno() { return( m_errno ); }
-
 	//! add a cronjob at the manager level
 	virtual void AddCron( CCron *pcCron )
 	{
@@ -1703,12 +1596,6 @@ public:
 			}
 		}
 	}
-
-	//! Get the Select Timeout in MICROSECONDS ( 1000 == 1 millisecond )
-	u_long GetSelectTimeout() { return( m_iSelectWait ); }
-	//! Set the Select Timeout in MICROSECODS ( 1000 == 1 millisecond )
-	//! Setting this to 0 will cause no timeout to happen, Select() will return instantly
-	void  SetSelectTimeout( u_long iTimeout ) { m_iSelectWait = iTimeout; }
 
 	std::vector<CCron *> & GetCrons() { return( m_vcCrons ); }
 
@@ -1819,354 +1706,14 @@ public:
 		return( iRet );
 	}
 
-protected:
-	//! this is a strict wrapper around C-api select(). Added in the event you need to do special work here
-	virtual int Select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+	void Loop()
 	{
-		return( select( nfds, readfds, writefds, exceptfds, timeout ) );
-	}
-protected:
-	/**
-	* fills a map of socks to a message for check
-	* map is empty if none are ready, check GetErrno() for the error, if not SUCCESS Select() failed
-	* each struct contains the socks error
-	* @see GetErrno()
-	*/
-	virtual void Select( std::map<T *, EMessages> & mpeSocks )
-	{
-		mpeSocks.clear();
-		struct timeval tv;
-		fd_set rfds, wfds;
-
-		tv.tv_sec = m_iSelectWait / 1000000;
-		tv.tv_usec = m_iSelectWait % 1000000;
-		u_int iQuickReset = 100;
-		if ( m_iSelectWait == 0 )
-			iQuickReset = 0;
-
-		TFD_ZERO( &rfds );
-		TFD_ZERO( &wfds );
-
-		// before we go any further, Process work needing to be done on the job
-		for( unsigned int i = 0; i < this->size(); i++ )
-		{
-			Csock::ECloseType eCloseType = (*this)[i]->GetCloseType();
-			if( eCloseType == T::CLT_NOW || eCloseType == T::CLT_DEREFERENCE || ( eCloseType == T::CLT_AFTERWRITE && (*this)[i]->GetWriteBuffer().empty() ) )
-				DelSock( i-- ); // close any socks that have requested it
-			else
-				(*this)[i]->Cron(); // call the Cron handler here
-		}
-
-		bool bHasWriteable = false;
-		bool bHasAvailSocks = false;
-		unsigned long long iNOW = 0;
-
-		for( unsigned int i = 0; i < this->size(); i++ )
-		{
-			T *pcSock = (*this)[i];
-
-			if ( pcSock->GetConState() != T::CST_OK )
-				continue;
-
-			bHasAvailSocks = true;
-
-			int & iRSock = pcSock->GetRSock();
-			int & iWSock = pcSock->GetWSock();
-			bool bIsReadPaused = pcSock->IsReadPaused();
-			if ( bIsReadPaused )
-			{
-				pcSock->ReadPaused();
-				bIsReadPaused = pcSock->IsReadPaused(); // re-read it again, incase it changed status)
-			}
-			if ( ( iRSock < 0 ) || ( iWSock < 0 ) )
-			{
-				SelectSock( mpeSocks, SUCCESS, pcSock );
-				continue;	// invalid sock fd
-			}
-
-			if ( pcSock->GetType() != T::LISTENER )
-			{
-				if ( ( pcSock->GetSSL() ) && ( pcSock->GetType() == T::INBOUND ) && ( !pcSock->FullSSLAccept() ) )
-				{
-					tv.tv_usec = iQuickReset;	// just make sure this returns quick incase we still need pending
-					tv.tv_sec = 0;
-					// try accept on this socket again
-					if ( !pcSock->AcceptSSL() )
-						pcSock->Close();
-
-				} else if ( ( pcSock->IsConnected() ) && ( pcSock->GetWriteBuffer().empty() ) )
-				{
-					if ( !bIsReadPaused )
-						TFD_SET( iRSock, &rfds );
-
-				} else if ( ( pcSock->GetSSL() ) && ( !pcSock->SslIsEstablished() ) && ( !pcSock->GetWriteBuffer().empty() ) )
-				{
-					// do this here, cause otherwise ssl will cause a small
-					// cpu spike waiting for the handshake to finish
-					TFD_SET( iRSock, &rfds );
-					// resend this data
-					if ( !pcSock->Write( "" ) )
-					{
-						pcSock->Close();
-					}
-					if( pcSock->GetWriteBuffer().size() )
-					{ // this means we need to write again, not everything got knocked out
-						TFD_SET( iWSock, &wfds );
-						bHasWriteable = true;
-					}
-
-				} else
-				{
-					if ( !bIsReadPaused )
-						TFD_SET( iRSock, &rfds );
-
-					if( pcSock->AllowWrite( iNOW ) )
-					{
-						TFD_SET( iWSock, &wfds );
-						bHasWriteable = true;
-					}
-				}
-
-			} else
-				TFD_SET( iRSock, &rfds );
-		}
-
-		// first check to see if any ssl sockets are ready for immediate read
-		// a mini select() type deal for ssl
-		for( unsigned int i = 0; i < this->size(); i++ )
-		{
-			T *pcSock = (*this)[i];
-
-			if ( pcSock->GetConState() != T::CST_OK )
-				continue;
-
-			if ( ( pcSock->GetSSL() ) && ( pcSock->GetType() != Csock::LISTENER ) )
-			{
-				if ( ( pcSock->GetPending() > 0 ) && ( !pcSock->IsReadPaused() ) )
-					SelectSock( mpeSocks, SUCCESS, pcSock );
-			}
-		}
-
-		// old fashion select, go fer it
-		int iSel;
-
-		if ( !mpeSocks.empty() ) // .1 ms pause to see if anything else is ready (IE if there is SSL data pending, don't wait too long)
-		{
-			tv.tv_usec = iQuickReset;
-			tv.tv_sec = 0;
-		}
-		else if ( ( !this->empty() ) && ( !bHasAvailSocks ) )
-		{
-			tv.tv_usec = iQuickReset;
-			tv.tv_sec = 0;
-		}
-
-
-		if ( bHasWriteable )
-			iSel = Select(FD_SETSIZE, &rfds, &wfds, NULL, &tv);
-		else
-			iSel = Select(FD_SETSIZE, &rfds, NULL, NULL, &tv);
-		if ( iSel == 0 )
-		{
-			if ( mpeSocks.empty() )
-				m_errno = SELECT_TIMEOUT;
-			else
-				m_errno = SUCCESS;
-
-			return;
-		}
-
-		if ( ( iSel == -1 ) && ( errno == EINTR ) )
-		{
-			if ( mpeSocks.empty() )
-				m_errno = SELECT_TRYAGAIN;
-			else
-				m_errno = SUCCESS;
-
-			return;
-		} else if ( iSel == -1 )
-		{
-			if ( mpeSocks.empty() )
-				m_errno = SELECT_ERROR;
-			else
-				m_errno = SUCCESS;
-
-			return;
-		} else
-		{
-			m_errno = SUCCESS;
-		}
-
-		// find out wich one is ready
-		for( unsigned int i = 0; i < this->size(); i++ )
-		{
-			T *pcSock = (*this)[i];
-
-			if ( pcSock->GetConState() != T::CST_OK )
-				continue;
-
-			int & iRSock = pcSock->GetRSock();
-			int & iWSock = pcSock->GetWSock();
-			EMessages iErrno = SUCCESS;
-
-			if ( ( iRSock < 0 ) || ( iWSock < 0 ) )
-			{
-				// trigger a success so it goes through the normal motions
-				// and an error is produced
-				SelectSock( mpeSocks, SUCCESS, pcSock );
-				continue; // watch for invalid socks
-			}
-
-			if ( TFD_ISSET( iWSock, &wfds ) )
-			{
-				if ( iSel > 0 )
-				{
-					iErrno = SUCCESS;
-					if ( ( !pcSock->GetWriteBuffer().empty() ) && ( pcSock->IsConnected() ) )
-					{ // write whats in the socks send buffer
-						if ( !pcSock->Write( "" ) )
-						{
-							// write failed, sock died :(
-							iErrno = SELECT_ERROR;
-						}
-					}
-				} else
-					iErrno = SELECT_ERROR;
-
-				SelectSock( mpeSocks, iErrno, pcSock );
-
-			} else if ( TFD_ISSET( iRSock, &rfds ) )
-			{
-				if ( iSel > 0 )
-					iErrno = SUCCESS;
-				else
-					iErrno = SELECT_ERROR;
-
-				if ( pcSock->GetType() != T::LISTENER )
-					SelectSock( mpeSocks, iErrno, pcSock );
-				else // someone is coming in!
-				{
-					CS_STRING sHost;
-					u_short port;
-					int inSock = pcSock->Accept( sHost, port );
-
-					if ( inSock != -1 )
-					{
-						if ( T::TMO_ACCEPT & pcSock->GetTimeoutType() )
-							pcSock->ResetTimer();	// let them now it got dinged
-
-						// if we have a new sock, then add it
-						T *NewpcSock = (T *)pcSock->GetSockObj( sHost, port );
-
-						if ( !NewpcSock )
-							NewpcSock = new T( sHost, port );
-
-						NewpcSock->BlockIO( false );
-						NewpcSock->SetType( T::INBOUND );
-						NewpcSock->SetRSock( inSock );
-						NewpcSock->SetWSock( inSock );
-						NewpcSock->SetIPv6( pcSock->GetIPv6() );
-
-						bool bAddSock = true;
-#ifdef HAVE_LIBSSL
-						//
-						// is this ssl ?
-						if ( pcSock->GetSSL() )
-						{
-							NewpcSock->SetCipher( pcSock->GetCipher() );
-							NewpcSock->SetPemLocation( pcSock->GetPemLocation() );
-							NewpcSock->SetPemPass( pcSock->GetPemPass() );
-							NewpcSock->SetRequireClientCertFlags( pcSock->GetRequireClientCertFlags() );
-							bAddSock = NewpcSock->AcceptSSL();
-						}
-
-#endif /* HAVE_LIBSSL */
-						if ( bAddSock )
-						{
-							// set the name of the listener
-							NewpcSock->SetParentSockName( pcSock->GetSockName() );
-							NewpcSock->SetRate( pcSock->GetRateBytes(), pcSock->GetRateTime() );
-							if ( NewpcSock->GetSockName().empty() )
-							{
-								std::stringstream s;
-								s << sHost << ":" << port;
-								AddSock( NewpcSock,  s.str() );
-
-							} else
-								AddSock( NewpcSock, NewpcSock->GetSockName() );
-						} else
-							CS_Delete( NewpcSock );
-					}
-#ifdef _WIN32
-					else if( GetSockError() != WSAEWOULDBLOCK )
-#else /* _WIN32 */
-					else if( GetSockError() != EAGAIN )
-#endif /* _WIN32 */
-					{
-						pcSock->SockError( GetSockError() );
-					}
-				}
-			}
-		}
-	}
-
-	time_t GetDynamicSleepTime( time_t iNow, time_t iMaxResolution = 3600 ) const
-	{
-		time_t iNextRunTime = iNow + iMaxResolution;
-		time_t iMinTimeout = iMaxResolution;
-		typename std::vector<T *>::const_iterator it;
-		// This is safe, because we don't modify the vector.
-		typename std::vector<T *>::const_iterator it_end = this->end();
-
-		for (it = this->begin(); it != it_end; it++)
-		{
-			T* pSock = *it;
-
-			if( pSock->GetConState() != T::CST_OK )
-				iMinTimeout = 0; // this is in a nebulous state, need to let it proceed like normal
-
-			time_t iTimeoutInSeconds = pSock->GetTimeout();
-			if( iTimeoutInSeconds > 0 )
-			{
-				time_t iLastTimeData = pSock->GetLastCheckTimeout();
-				time_t iDiff = iNow - iLastTimeData;
-				if( iDiff > iTimeoutInSeconds )
-					iTimeoutInSeconds = 0;
-				else
-					iTimeoutInSeconds -= iDiff;
-
-				iMinTimeout = std::min( iMinTimeout, iTimeoutInSeconds );
-			}
-
-			const std::vector<CCron *> & vCrons = pSock->GetCrons();
-			std::vector<CCron *>::const_iterator cit;
-			std::vector<CCron *>::const_iterator cit_end = vCrons.end();
-			for (cit = vCrons.begin(); cit != cit_end; cit++)
-				iNextRunTime = std::min( iNextRunTime, (*cit)->GetNextRun() );
-		}
-		std::vector<CCron *>::const_iterator cit;
-		std::vector<CCron *>::const_iterator cit_end = m_vcCrons.end();
-		for (cit = m_vcCrons.begin(); cit != cit_end; cit++)
-			iNextRunTime = std::min( iNextRunTime, (*cit)->GetNextRun() );
-
-		if( iNextRunTime < iNow )
-			return( 0 ); // smallest unit possible
-		return( std::min( iNextRunTime - iNow, iMinTimeout ) );
-	}
-
-	//! internal use only
-	virtual void SelectSock( std::map<T *, EMessages> & mpeSocks, EMessages eErrno, T * pcSock )
-	{
-		if ( mpeSocks.find( pcSock ) != mpeSocks.end() )
-			return;
-
-		mpeSocks[pcSock] = eErrno;
+		ev_loop(EV_DEFAULT_UC_ 0);
 	}
 
 	//! these crons get ran and checked in Loop()
 	virtual void Cron()
 	{
-		time_t iNow = 0;
 		for( unsigned int a = 0; a < m_vcCrons.size(); a++ )
 		{
 			CCron *pcCron = m_vcCrons[a];
@@ -2175,8 +1722,7 @@ protected:
 			{
 				CS_Delete( pcCron );
 				m_vcCrons.erase( m_vcCrons.begin() + a-- );
-			} else
-				pcCron->run( iNow );
+			}
 		}
 	}
 
@@ -2185,12 +1731,11 @@ protected:
 
 	///////////
 	// members
-	EMessages				m_errno;
 	std::vector<CCron *>	m_vcCrons;
 	unsigned long long		m_iCallTimeouts;
 	unsigned long long		m_iBytesRead;
 	unsigned long long		m_iBytesWritten;
-	u_long					m_iSelectWait;
+	ev_prepare			m_prepare;
 };
 
 //! basic socket class

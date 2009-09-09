@@ -84,12 +84,6 @@ static inline void set_non_blocking(int fd)
 	ioctlsocket( fd, FIONBIO, &iOpts );
 }
 
-static inline void set_blocking(int fd)
-{
-	u_long iOpts = 0;
-	ioctlsocket( fd, FIONBIO, &iOpts );
-}
-
 static inline void set_close_on_exec(int fd)
 {
 	// TODO add this for windows
@@ -103,15 +97,6 @@ static inline void set_non_blocking(int fd)
 	if ( fdflags < 0 )
 		return; // Ignore errors
 	fcntl( fd, F_SETFL, fdflags|O_NONBLOCK );
-}
-
-static inline void set_blocking(int fd)
-{
-	int fdflags = fcntl(fd, F_GETFL, 0);
-	if ( fdflags < 0 )
-		return; // Ignore errors
-	fdflags &= ~O_NONBLOCK;
-	fcntl( fd, F_SETFL, fdflags );
 }
 
 static inline void set_close_on_exec(int fd)
@@ -323,11 +308,16 @@ bool InitCsocket()
 	if( !InitSSL() )
 		return( false );
 #endif /* HAVE_LIBSSL */
+
+	ev_default_loop(0);
+
 	return( true );
 }
 
 void ShutdownCsocket()
 {
+	ev_default_destroy();
+
 #ifdef HAVE_LIBSSL
 	ERR_free_strings();
 #endif /* HAVE_LIBSSL */
@@ -435,70 +425,55 @@ CCron::CCron()
 {
 	m_iCycles = 0;
 	m_iMaxCycles = 0;
-	m_bActive = true;
-	m_iTime	= 0;
-	m_iTimeSequence = 60;
-	m_bPause = false;
-	m_bRunOnNextCall = false;
+
+	m_timer.data = this;
+	ev_timer_init(&m_timer, &TimerCallback, 0, 0);
 }
 
-void CCron::run( time_t & iNow )
+CCron::~CCron()
 {
-	if ( m_bPause )
-		return;
-
-	if( iNow == 0 )
-		iNow = time( NULL );
-
-	if ( ( m_bActive ) && ( iNow >= m_iTime || m_bRunOnNextCall ) )
-	{
-		m_bRunOnNextCall = false; // Setting this here because RunJob() could set it back to true
-		RunJob();
-
-		if ( ( m_iMaxCycles > 0 ) && ( ++m_iCycles >= m_iMaxCycles  ) )
-			m_bActive = false;
-		else
-			m_iTime = iNow + m_iTimeSequence;
-	}
+	Stop();
 }
 
 void CCron::StartMaxCycles( int TimeSequence, u_int iMaxCycles )
 {
-	m_iTimeSequence = TimeSequence;
-	m_iTime = time( NULL ) + m_iTimeSequence;
+	Stop();
+	ev_timer_set(&m_timer, TimeSequence, TimeSequence);
+	ev_timer_start(EV_DEFAULT_UC_ &m_timer);
 	m_iMaxCycles = iMaxCycles;
 }
 
-void CCron::Start( int TimeSequence )
+void CCron::Start( int TimeSequence, bool bFirstCall )
 {
-	m_iTimeSequence = TimeSequence;
-	m_iTime = time( NULL ) + m_iTimeSequence;
+	int after = TimeSequence;
+	if (bFirstCall)
+		after = 0;
+	Stop();
+	ev_timer_set(&m_timer, after, TimeSequence);
+	ev_timer_start(EV_DEFAULT_UC_ &m_timer);
 	m_iMaxCycles = 0;
 }
 
 void CCron::Stop()
 {
-	m_bActive = false;
+	ev_timer_stop(EV_DEFAULT_UC_ &m_timer);
 }
 
-void CCron::Pause()
-{
-	m_bPause = true;
+void CCron::TimerCallback(EV_P_ ev_timer *timer, int revents) {
+	CCron *p = (CCron *) timer->data;
+	p->RunJob();
+
+	if (p->m_iMaxCycles > 0 && ++p->m_iCycles >= p->m_iMaxCycles)
+		p->Stop();
 }
 
-void CCron::UnPause()
-{
-	m_bPause = false;
-}
-
-int CCron::GetInterval() const { return( m_iTimeSequence ); }
+int CCron::GetInterval() const { return( m_timer.repeat ); }
 u_int CCron::GetMaxCycles() const { return( m_iMaxCycles ); }
 u_int CCron::GetCyclesLeft() const { return( ( m_iMaxCycles > m_iCycles ? ( m_iMaxCycles - m_iCycles ) : 0 ) ); }
 
-bool CCron::isValid() { return( m_bActive ); }
+bool CCron::isValid() { return( ev_is_active(&m_timer) ); }
 const CS_STRING & CCron::GetName() const { return( m_sName ); }
 void CCron::SetName( const CS_STRING & sName ) { m_sName = sName; }
-void CCron::RunJob() { CS_DEBUG( "This should be overriden" ); }
 
 Csock::Csock( int itimeout )
 {
@@ -535,26 +510,28 @@ Csock::~Csock()
 	FREE_CTX();
 #endif /* HAVE_LIBSSL */
 
-	if ( m_iReadSock != m_iWriteSock )
+	if ( GetRSock() != GetWSock() )
 	{
-		if( m_iReadSock >= 0 )
-			CS_CLOSE( m_iReadSock );
-		if( m_iWriteSock >= 0 )
-			CS_CLOSE( m_iWriteSock );
-	} else if( m_iReadSock >= 0 )
-		CS_CLOSE( m_iReadSock );
+		if( GetRSock() >= 0 )
+			CS_CLOSE( GetRSock() );
+		if( GetWSock() >= 0 )
+			CS_CLOSE( GetWSock() );
+	} else if( GetRSock() >= 0 )
+		CS_CLOSE( GetRSock() );
 
-	m_iReadSock = -1;
-	m_iWriteSock = -1;
+	SetSock(-1);
 
 	// delete any left over crons
 	for( vector<CCron *>::size_type i = 0; i < m_vcCrons.size(); i++ )
 		CS_Delete( m_vcCrons[i] );
+
+	ev_io_stop(EV_DEFAULT_UC_ &m_read_io);
+	ev_io_stop(EV_DEFAULT_UC_ &m_write_io);
 }
 
 void Csock::Dereference()
 {
-	m_iWriteSock = m_iReadSock = -1;
+	SetSock(-1);
 
 #ifdef HAVE_LIBSSL
 	m_ssl = NULL;
@@ -567,19 +544,19 @@ void Csock::Dereference()
 
 void Csock::Copy( const Csock & cCopy )
 {
+	SetRSock(cCopy.GetRSock());
+	SetWSock(cCopy.GetWSock());
+
 	m_iTcount		= cCopy.m_iTcount;
 	m_iLastCheckTimeoutTime	=	cCopy.m_iLastCheckTimeoutTime;
 	m_iport 		= cCopy.m_iport;
 	m_iRemotePort	= cCopy.m_iRemotePort;
 	m_iLocalPort	= cCopy.m_iLocalPort;
-	m_iReadSock		= cCopy.m_iReadSock;
-	m_iWriteSock	= cCopy.m_iWriteSock;
 	m_itimeout		= cCopy.m_itimeout;
 	m_iConnType		= cCopy.m_iConnType;
 	m_iMethod		= cCopy.m_iMethod;
 	m_bssl			= cCopy.m_bssl;
 	m_bIsConnected	= cCopy.m_bIsConnected;
-	m_bBLOCK		= cCopy.m_bBLOCK;
 	m_bFullsslAccept	= cCopy.m_bFullsslAccept;
 	m_bsslEstablished	= cCopy.m_bsslEstablished;
 	m_bEnableReadLine	= cCopy.m_bEnableReadLine;
@@ -638,7 +615,6 @@ void Csock::Copy( const Csock & cCopy )
 	m_sBindHost			= cCopy.m_sBindHost;
 	m_iCurBindCount		= cCopy.m_iCurBindCount;
 	m_iDNSTryCount		= cCopy.m_iDNSTryCount;
-
 }
 
 Csock & Csock::operator<<( const CS_STRING & s )
@@ -754,16 +730,16 @@ bool Csock::Connect( const CS_STRING & sBindHost, bool bSkipSetup )
 	}
 
 	// set it none blocking
-	set_non_blocking( m_iReadSock );
+	set_non_blocking( GetRSock() );
 
 	m_iConnType = OUTBOUND;
 
 	int ret = -1;
 	if( !GetIPv6() )
-		ret = connect( m_iReadSock, (struct sockaddr *)m_address.GetSockAddr(), m_address.GetSockAddrLen() );
+		ret = connect( GetRSock(), (struct sockaddr *)m_address.GetSockAddr(), m_address.GetSockAddrLen() );
 #ifdef HAVE_IPV6
 	else
-		ret = connect( m_iReadSock, (struct sockaddr *)m_address.GetSockAddr6(), m_address.GetSockAddrLen6() );
+		ret = connect( GetRSock(), (struct sockaddr *)m_address.GetSockAddr6(), m_address.GetSockAddrLen6() );
 #endif /* HAVE_IPV6 */
 #ifndef _WIN32
 	if ( ( ret == -1 ) && ( GetSockError() != EINPROGRESS ) )
@@ -772,13 +748,8 @@ bool Csock::Connect( const CS_STRING & sBindHost, bool bSkipSetup )
 #endif /* _WIN32 */
 
 	{
-		CS_DEBUG( "Connect Failed. ERRNO [" << GetSockError() << "] FD [" << m_iReadSock << "]" );
+		CS_DEBUG( "Connect Failed. ERRNO [" << GetSockError() << "] FD [" << GetRSock() << "]" );
 		return( false );
-	}
-
-	if ( m_bBLOCK )
-	{
-		set_blocking( m_iReadSock );
 	}
 
 	if ( m_eConState != CST_OK )
@@ -787,66 +758,6 @@ bool Csock::Connect( const CS_STRING & sBindHost, bool bSkipSetup )
 	}
 
 	return( true );
-}
-
-int Csock::WriteSelect()
-{
-	if ( m_iWriteSock < 0 )
-		return( SEL_ERR );
-
-	struct timeval tv;
-	fd_set wfds;
-
-	TFD_ZERO( &wfds );
-	TFD_SET( m_iWriteSock, &wfds );
-
-	tv.tv_sec = m_itimeout;
-	tv.tv_usec = 0;
-
-	int ret = select( FD_SETSIZE, NULL, &wfds, NULL, &tv );
-
-	if ( ret == 0 )
-		return( SEL_TIMEOUT );
-
-	if ( ret == -1 )
-	{
-		if ( GetSockError() == EINTR )
-			return( SEL_EAGAIN );
-		else
-			return( SEL_ERR );
-	}
-
-	return( SEL_OK );
-}
-
-int Csock::ReadSelect()
-{
-	if ( m_iReadSock < 0 )
-		return( SEL_ERR );
-
-	struct timeval tv;
-	fd_set rfds;
-
-	TFD_ZERO( &rfds );
-	TFD_SET( m_iReadSock, &rfds );
-
-	tv.tv_sec = m_itimeout;
-	tv.tv_usec = 0;
-
-	int ret = select( FD_SETSIZE, &rfds, NULL, NULL, &tv );
-
-	if ( ret == 0 )
-		return( SEL_TIMEOUT );
-
-	if ( ret == -1 )
-	{
-		if ( GetSockError() == EINTR )
-			return( SEL_EAGAIN );
-		else
-			return( SEL_ERR );
-	}
-
-	return( SEL_OK );
 }
 
 bool Csock::Listen( u_short iPort, int iMaxConns, const CS_STRING & sBindHost, u_int iTimeout )
@@ -861,35 +772,33 @@ bool Csock::Listen( u_short iPort, int iMaxConns, const CS_STRING & sBindHost, u
 			return( false );
 	}
 
-	m_iReadSock = m_iWriteSock = SOCKET( true );
+	SetRSock(SOCKET(true));
 
-	if ( m_iReadSock == -1 )
+	if ( GetRSock() == -1 )
 		return( false );
+	SetWSock(GetRSock());
 
 	m_address.SinFamily();
 	m_address.SinPort( iPort );
 
 	if( !GetIPv6() )
 	{
-		if ( bind( m_iReadSock, (struct sockaddr *) m_address.GetSockAddr(), m_address.GetSockAddrLen() ) == -1 )
+		if ( bind( GetRSock(), (struct sockaddr *) m_address.GetSockAddr(), m_address.GetSockAddrLen() ) == -1 )
 			return( false );
 	}
 #ifdef HAVE_IPV6
 	else
 	{
-		if ( bind( m_iReadSock, (struct sockaddr *) m_address.GetSockAddr6(), m_address.GetSockAddrLen6() ) == -1 )
+		if ( bind( GetRSock(), (struct sockaddr *) m_address.GetSockAddr6(), m_address.GetSockAddrLen6() ) == -1 )
 			return( false );
 	}
 #endif /* HAVE_IPV6 */
 
-	if ( listen( m_iReadSock, iMaxConns ) == -1 )
+	if ( listen( GetRSock(), iMaxConns ) == -1 )
 		return( false );
 
-	if ( !m_bBLOCK )
-	{
-		// set it none blocking
-		set_non_blocking( m_iReadSock );
-	}
+	// set it none blocking
+	set_non_blocking( GetRSock() );
 
 	return( true );
 }
@@ -901,7 +810,7 @@ int Csock::Accept( CS_STRING & sHost, u_short & iRPort )
 	{
 		struct sockaddr_in client;
 		socklen_t clen = sizeof( client );
-		iSock = accept( m_iReadSock, (struct sockaddr *) &client, &clen );
+		iSock = accept( GetRSock(), (struct sockaddr *) &client, &clen );
 		if( iSock != -1 )
 		{
 			getpeername( iSock, (struct sockaddr *) &client, &clen );
@@ -915,7 +824,7 @@ int Csock::Accept( CS_STRING & sHost, u_short & iRPort )
 		char straddr[INET6_ADDRSTRLEN];
 		struct sockaddr_in6 client;
 		socklen_t clen = sizeof( client );
-		iSock = accept( m_iReadSock, (struct sockaddr *) &client, &clen );
+		iSock = accept( GetRSock(), (struct sockaddr *) &client, &clen );
 		if( iSock != -1 )
 		{
 			getpeername( iSock, (struct sockaddr *) &client, &clen );
@@ -933,11 +842,8 @@ int Csock::Accept( CS_STRING & sHost, u_short & iRPort )
 		// Make it close-on-exec
 		set_close_on_exec( iSock );
 
-		if ( !m_bBLOCK )
-		{
-			// make it none blocking 
-			set_non_blocking( iSock );
-		}
+		// make it none blocking
+		set_non_blocking( iSock );
 
 		if ( !ConnectionFrom( sHost, iRPort ) )
 		{
@@ -1051,8 +957,8 @@ bool Csock::SSLClientSetup()
 	if ( !m_ssl )
 		return( false );
 
-	SSL_set_rfd( m_ssl, m_iReadSock );
-	SSL_set_wfd( m_ssl, m_iWriteSock );
+	SSL_set_rfd( m_ssl, GetRSock() );
+	SSL_set_wfd( m_ssl, GetWSock() );
 	SSL_set_verify( m_ssl, SSL_VERIFY_PEER, ( m_pCerVerifyCB ? m_pCerVerifyCB : CertVerifyCB ) );
 	SSL_set_ex_data( m_ssl, GetCsockClassIdx(), this );
 
@@ -1152,8 +1058,8 @@ bool Csock::SSLServerSetup()
 		return( false );
 
 	// Call for client Verification
-	SSL_set_rfd( m_ssl, m_iReadSock );
-	SSL_set_wfd( m_ssl, m_iWriteSock );
+	SSL_set_rfd( m_ssl, GetRSock() );
+	SSL_set_wfd( m_ssl, GetWSock() );
 	SSL_set_accept_state( m_ssl );
 	if ( m_iRequireClientCertFlags )
 	{
@@ -1171,7 +1077,7 @@ bool Csock::SSLServerSetup()
 bool Csock::ConnectSSL( const CS_STRING & sBindhost )
 {
 #ifdef HAVE_LIBSSL
-	if ( m_iReadSock == -1 )
+	if ( GetRSock() == -1 )
 		if ( !Connect( sBindhost ) )
 			return( false );
 	if ( !m_ssl )
@@ -1180,10 +1086,7 @@ bool Csock::ConnectSSL( const CS_STRING & sBindhost )
 
 	bool bPass = true;
 
-	if ( m_bBLOCK )
-	{
-		set_non_blocking( m_iReadSock );
-	}
+	set_non_blocking( GetRSock() );
 
 	int iErr = SSL_connect( m_ssl );
 	if ( iErr != 1 )
@@ -1204,12 +1107,6 @@ bool Csock::ConnectSSL( const CS_STRING & sBindhost )
 #endif /* _WIN32 */
 	} else
 		bPass = true;
-
-	if ( m_bBLOCK )
-	{
-		// unset the flags afterwords, rather then have connect block
-		set_blocking( m_iReadSock );
-	}
 
 	if ( m_eConState != CST_OK )
 		m_eConState = CST_OK;
@@ -1244,12 +1141,6 @@ bool Csock::Write( const char *data, int len )
 	if ( m_eConState != CST_OK )
 		return( true );
 
-	if ( m_bBLOCK )
-	{
-		if ( WriteSelect() != SEL_OK )
-			return( false );
-
-	}
 	// rate shaping
 	u_int iBytesToSend = 0;
 
@@ -1288,6 +1179,8 @@ bool Csock::Write( const char *data, int len )
 
 	} else
 		iBytesToSend = m_sSend.length();
+
+#warning TODO this will cause spinning if the ev_io isnt properly started / stopped :(
 
 #ifdef HAVE_LIBSSL
 	if ( m_bssl )
@@ -1347,35 +1240,43 @@ bool Csock::Write( const char *data, int len )
 
 		return( true );
 	}
+	else
 #endif /* HAVE_LIBSSL */
+	{
 #ifdef _WIN32
-	int bytes = send( m_iWriteSock, m_sSend.data(), iBytesToSend, 0 );
+		int bytes = send( GetWSock(), m_sSend.data(), iBytesToSend, 0 );
 #else
-	int bytes = write( m_iWriteSock, m_sSend.data(), iBytesToSend );
+		int bytes = write( GetWSock(), m_sSend.data(), iBytesToSend );
 #endif /* _WIN32 */
 
-	if ( ( bytes == -1 ) && ( GetSockError() == ECONNREFUSED ) )
-	{
-		ConnectionRefused();
-		return( false );
-	}
+		if ( ( bytes == -1 ) && ( GetSockError() == ECONNREFUSED ) )
+		{
+			ConnectionRefused();
+			return( false );
+		}
 
 #ifdef _WIN32
-	if ( ( bytes <= 0 ) && ( GetSockError() != WSAEWOULDBLOCK ) )
-		return( false );
+		if ( ( bytes <= 0 ) && ( GetSockError() != WSAEWOULDBLOCK ) )
+			return( false );
 #else
-	if ( ( bytes <= 0 ) && ( GetSockError() != EAGAIN ) )
-		return( false );
+		if ( ( bytes <= 0 ) && ( GetSockError() != EAGAIN ) )
+			return( false );
 #endif /* _WIN32 */
 
-	// delete the bytes we sent
-	if ( bytes > 0 )
-	{
-		m_sSend.erase( 0, bytes );
-		if ( TMO_WRITE & GetTimeoutType() )
-			ResetTimer();	// reset the timer on successful write
-		m_iBytesWritten += (unsigned long long)bytes;
+		// delete the bytes we sent
+		if ( bytes > 0 )
+		{
+			m_sSend.erase( 0, bytes );
+			if ( TMO_WRITE & GetTimeoutType() )
+				ResetTimer();	// reset the timer on successful write
+			m_iBytesWritten += (unsigned long long)bytes;
+		}
 	}
+
+	if (m_sSend.empty())
+		ev_io_stop(EV_DEFAULT_UC_ &m_write_io);
+	else
+		ev_io_start(EV_DEFAULT_UC_ &m_write_io);
 
 	return( true );
 }
@@ -1392,28 +1293,15 @@ int Csock::Read( char *data, int len )
 	if ( ( IsReadPaused() ) && ( SslIsEstablished() ) )
 		return( READ_EAGAIN ); // allow the handshake to complete first
 
-	if ( m_bBLOCK )
-	{
-		switch( ReadSelect() )
-		{
-			case SEL_OK:
-				break;
-			case SEL_TIMEOUT:
-				return( READ_TIMEDOUT );
-			default:
-				return( READ_ERR );
-		}
-	}
-
 #ifdef HAVE_LIBSSL
 	if ( m_bssl )
 		bytes = SSL_read( m_ssl, data, len );
 	else
 #endif /* HAVE_LIBSSL */
 #ifdef _WIN32
-		bytes = recv( m_iReadSock, data, len, 0 );
+		bytes = recv( GetRSock(), data, len, 0 );
 #else
-		bytes = read( m_iReadSock, data, len );
+		bytes = read( GetRSock(), data, len );
 #endif /* _WIN32 */
 	if ( bytes == -1 )
 	{
@@ -1525,19 +1413,32 @@ CS_STRING Csock::GetRemoteIP()
 bool Csock::IsConnected() { return( m_bIsConnected ); }
 void Csock::SetIsConnected( bool b ) { m_bIsConnected = b; }
 
-int & Csock::GetRSock() { return( m_iReadSock ); }
-void Csock::SetRSock( int iSock ) { m_iReadSock = iSock; }
-int & Csock::GetWSock() { return( m_iWriteSock ); }
-void Csock::SetWSock( int iSock ) { m_iWriteSock = iSock; }
-void Csock::SetSock( int iSock ) { m_iWriteSock = iSock; m_iReadSock = iSock; }
-int & Csock::GetSock() { return( m_iReadSock ); }
+void Csock::SetRSock( int iSock )
+{
+	ev_io_stop(EV_DEFAULT_UC_ &m_read_io);
+	ev_io_set(&m_read_io, iSock, EV_READ);
+	if (iSock >= 0 && !IsReadPaused())
+		ev_io_start(EV_DEFAULT_UC_ &m_read_io);
+}
+void Csock::SetWSock( int iSock )
+{
+	ev_io_stop(EV_DEFAULT_UC_ &m_write_io);
+	ev_io_set(&m_write_io, iSock, EV_WRITE);
+	if (iSock >= 0)
+		ev_io_start(EV_DEFAULT_UC_ &m_write_io);
+}
+void Csock::SetSock( int iSock ) { SetWSock(iSock); SetRSock(iSock); }
+int Csock::GetRSock() const { return( m_read_io.fd ); }
+int Csock::GetWSock() const { return( m_write_io.fd ); }
+int Csock::GetSock() const { return( GetRSock() ); }
 void Csock::ResetTimer() { m_iLastCheckTimeoutTime = 0; m_iTcount = 0; }
-void Csock::PauseRead() { m_bPauseRead = true; }
+void Csock::PauseRead() { m_bPauseRead = true; ev_io_stop(EV_DEFAULT_UC_ &m_read_io); }
 bool Csock::IsReadPaused() { return( m_bPauseRead ); }
 
 void Csock::UnPauseRead()
 {
 	m_bPauseRead = false;
+	ev_io_start(EV_DEFAULT_UC_ &m_read_io);
 	ResetTimer();
 	PushBuff( "", 0, true );
 }
@@ -1730,19 +1631,6 @@ void Csock::Close( ECloseType eCloseType )
 {
 	m_eCloseType = eCloseType;
 }
-void Csock::BlockIO( bool bBLOCK ) { m_bBLOCK = bBLOCK; }
-
-void Csock::NonBlockingIO()
-{
-	set_non_blocking( m_iReadSock );
-
-	if ( m_iReadSock != m_iWriteSock )
-	{
-		set_non_blocking( m_iWriteSock );
-	}
-
-	BlockIO( false );
-}
 
 bool Csock::GetSSL() { return( m_bssl ); }
 void Csock::SetSSL( bool b ) { m_bssl = b; }
@@ -1794,7 +1682,6 @@ SSL_SESSION * Csock::GetSSLSession()
 #endif /* HAVE_LIBSSL */
 
 const CS_STRING & Csock::GetWriteBuffer() { return( m_sSend ); }
-void Csock::ClearWriteBuffer() { m_sSend.clear(); }
 bool Csock::FullSSLAccept() { return ( m_bFullsslAccept ); }
 bool Csock::SslIsEstablished() { return ( m_bsslEstablished ); }
 
@@ -1840,7 +1727,9 @@ bool Csock::ConnectFD( int iReadFD, int iWriteFD, const CS_STRING & sName, bool 
 	SetWSock( iWriteFD );
 
 	// set it up as non-blocking io
-	NonBlockingIO();
+	set_non_blocking( GetRSock() );
+	if (GetRSock() != GetWSock())
+		set_non_blocking(GetWSock());
 
 	if ( bIsSSL )
 	{
@@ -1921,8 +1810,6 @@ unsigned long long Csock::GetRateTime() { return( m_iMaxMilliSeconds ); }
 
 void Csock::Cron()
 {
-	time_t iNow = 0;
-
 	for( vector<CCron *>::size_type a = 0; a < m_vcCrons.size(); a++ )
 	{
 		CCron *pcCron = m_vcCrons[a];
@@ -1931,8 +1818,7 @@ void Csock::Cron()
 		{
 			CS_Delete( pcCron );
 			m_vcCrons.erase( m_vcCrons.begin() + a-- );
-		} else
-			pcCron->run( iNow );
+		}
 	}
 }
 
@@ -2078,10 +1964,10 @@ bool Csock::SetupVHost()
 	}
 	int iRet = -1;
 	if( !GetIPv6() )
-		iRet = bind( m_iReadSock, (struct sockaddr *) m_bindhost.GetSockAddr(), m_bindhost.GetSockAddrLen() );
+		iRet = bind( GetRSock(), (struct sockaddr *) m_bindhost.GetSockAddr(), m_bindhost.GetSockAddrLen() );
 #ifdef HAVE_IPV6
 	else
-		iRet = bind( m_iReadSock, (struct sockaddr *) m_bindhost.GetSockAddr6(), m_bindhost.GetSockAddrLen6() );
+		iRet = bind( GetRSock(), (struct sockaddr *) m_bindhost.GetSockAddr6(), m_bindhost.GetSockAddrLen6() );
 #endif /* HAVE_IPV6 */
 
 	if ( iRet == 0 )
@@ -2147,14 +2033,18 @@ int Csock::SOCKET( bool bListen )
 
 void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 {
+	ev_io_init(&m_read_io, EventCallback, -1, EV_READ);
+	ev_io_init(&m_write_io, EventCallback, -1, EV_WRITE);
+	m_read_io.data = this;
+	m_write_io.data = this;
+
 #ifdef HAVE_LIBSSL
 	m_ssl = NULL;
 	m_ssl_ctx = NULL;
 	m_iRequireClientCertFlags = 0;
 #endif /* HAVE_LIBSSL */
 	m_iTcount = 0;
-	m_iReadSock = -1;
-	m_iWriteSock = -1;
+	SetSock(-1);
 	m_itimeout = itimeout;
 	m_bssl = false;
 	m_bIsConnected = false;
@@ -2162,7 +2052,6 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 	m_shostname = sHostname;
 	m_sbuffer.clear();
 	m_eCloseType = CLT_DONT;
-	m_bBLOCK = true;
 	m_iMethod = SSL23;
 	m_sCipherType = "ALL";
 	m_iMaxBytes = 0;
@@ -2189,3 +2078,148 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 	m_iLastCheckTimeoutTime = 0;
 }
 
+void Csock::DoReadSelect()
+{
+	if (GetType() == LISTENER)
+		DoAccept();
+	else
+		DoRead();
+}
+
+void Csock::DoAccept()
+{
+	CS_STRING sHost;
+	u_short port;
+	int inSock = Accept( sHost, port );
+
+	if (inSock == -1)
+	{
+#ifdef _WIN32
+		if(GetSockError() != WSAEWOULDBLOCK)
+#else /* _WIN32 */
+		if(GetSockError() != EAGAIN)
+#endif /* _WIN32 */
+			SockError(GetSockError());
+
+		return;
+	}
+
+	if ( TMO_ACCEPT & GetTimeoutType() )
+		ResetTimer();	// let them now it got dinged
+
+	// if we have a new sock, then add it
+	Csock *NewpcSock = GetSockObj(sHost, port);
+
+	if (!NewpcSock)
+	{
+		CS_CLOSE(inSock);
+		return;
+	}
+
+	NewpcSock->SetType(INBOUND);
+	NewpcSock->SetRSock(inSock);
+	NewpcSock->SetWSock(inSock);
+	NewpcSock->SetIPv6(GetIPv6());
+
+	bool bAddSock = true;
+#ifdef HAVE_LIBSSL
+	// is this ssl ?
+	if ( GetSSL() )
+	{
+		NewpcSock->SetCipher( GetCipher() );
+		NewpcSock->SetPemLocation( GetPemLocation() );
+		NewpcSock->SetPemPass( GetPemPass() );
+		NewpcSock->SetRequireClientCertFlags( GetRequireClientCertFlags() );
+		bAddSock = NewpcSock->AcceptSSL();
+	}
+#endif /* HAVE_LIBSSL */
+
+	if ( bAddSock )
+	{
+		// set the name of the listener
+		NewpcSock->SetParentSockName( GetSockName() );
+		NewpcSock->SetRate( GetRateBytes(), GetRateTime() );
+		if ( NewpcSock->GetSockName().empty() )
+		{
+			std::stringstream s;
+			s << sHost << ":" << port;
+			m_Manager->AddSock( NewpcSock,  s.str() );
+
+		} else
+			m_Manager->AddSock( NewpcSock, NewpcSock->GetSockName() );
+	} else
+		CS_Delete( NewpcSock );
+}
+
+void Csock::DoRead()
+{
+	bool bFirst = true;
+	while (true) {
+		// We read from the socket until there is no pending data
+		// present anymore, that way we make sure we don't miss data in
+		// openssl's read buffer.
+		int iLen = GetPending();
+
+		if (iLen == 0 && !bFirst)
+			break;
+
+		bFirst = false;
+
+		if ( iLen <= 0 )
+			iLen = CS_BLOCKSIZE;
+
+		CSCharBuffer cBuff(iLen);
+
+		int bytes = Read(cBuff(), iLen);
+
+		if (bytes != READ_TIMEDOUT && bytes != READ_CONNREFUSED && !IsConnected() )
+		{
+			SetIsConnected(true);
+			Connected();
+		}
+
+		switch( bytes )
+		{
+			case READ_EOF:
+			{
+				Close(CLT_NOW);
+				break;
+			}
+
+			case READ_ERR:
+			{
+				SockError(GetSockError());
+				Close(CLT_NOW);
+				break;
+			}
+
+			case READ_EAGAIN:
+				break;
+
+			case READ_CONNREFUSED:
+				ConnectionRefused();
+				Close(CLT_NOW);
+				break;
+
+			case READ_TIMEDOUT:
+				Timeout();
+				Close(CLT_NOW);
+				break;
+
+			default:
+			{
+				if ( TMO_READ & GetTimeoutType() )
+					ResetTimer();	// reset the timeout timer
+
+				// Call ReadData() before PushBuff() so that it is called before the ReadLine() event - LD  07/18/05
+				ReadData(cBuff(), bytes);
+				PushBuff(cBuff(), bytes);
+
+				// Try to read more data from the socket
+				CS_DEBUG("did read, retry");
+				break;
+			}
+		}
+	}
+	CS_DEBUG("done");
+}

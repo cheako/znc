@@ -29,7 +29,8 @@ public:
 	~CZNC();
 
 	void DeleteUsers();
-	void Loop();
+	void LoopPrepare();
+	void LoopCleanup();
 	bool WriteISpoof(CUser* pUser);
 	void ReleaseISpoof();
 	bool WritePidFile(int iPid);
@@ -75,14 +76,12 @@ public:
 	void AuthUser(CSmartPtr<CAuthBase> AuthClass);
 
 	// Setters
-	void SetNeedRehash(bool b) { m_bNeedRehash = b; }
 	void SetStatusPrefix(const CString& s) { m_sStatusPrefix = (s.empty()) ? "*" : s; }
 	void SetISpoofFile(const CString& s) { m_sISpoofFile = s; }
 	void SetISpoofFormat(const CString& s) { m_sISpoofFormat = (s.empty()) ? "global { reply \"%\" }" : s; }
 	// !Setters
 
 	// Getters
-	bool GetNeedRehash() const { return m_bNeedRehash; }
 	CSockManager& GetManager() { return m_Manager; }
 	const CSockManager& GetManager() const { return m_Manager; }
 #ifdef _MODULES
@@ -133,10 +132,15 @@ private:
 	// Returns true if something was done
 	bool HandleUserDeletion();
 
+	static void LoopPrepareUsers(EV_P_ ev_prepare *prep, int revents);
+	static void HandleSIGHUP(EV_P_ ev_signal *signal, int revents);
+
 protected:
+	ev_prepare		m_prepare;
+	ev_signal		m_signal;
+
 	time_t				m_TimeStarted;
 
-	bool				m_bNeedRehash;
 	vector<CListener*>		m_vpListeners;
 	map<CString,CUser*>		m_msUsers;
 	map<CString,CUser*>		m_msDelUsers;

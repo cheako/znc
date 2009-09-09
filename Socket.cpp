@@ -30,6 +30,16 @@ static ares_channel& GetAres() {
 	static ares_channel m_ares;
 	return m_ares;
 }
+
+#warning This is ugly :(
+static ev_check c;
+static void AresTimeoutCheck(EV_P_ ev_check *p, int revents)
+{
+	// This makes c-ares process timeouts
+	ares_process_fd(GetAres(), ARES_SOCKET_BAD, ARES_SOCKET_BAD);
+}
+
+static void AresSocketCallback(void *data, ares_socket_t fd, int readable, int writeable);
 #endif
 
 CZNCSock::~CZNCSock() {
@@ -45,46 +55,32 @@ CZNCSock::~CZNCSock() {
 
 CSockManager::CSockManager() : TSocketManager<CZNCSock>() {
 #ifdef HAVE_ARES
-	int i = ares_init(&GetAres());
+	struct ares_options opts;
+	memset(&opts, 0, sizeof(opts));
+
+	opts.sock_state_cb = AresSocketCallback;
+	opts.sock_state_cb_data = this;
+
+	int i = ares_init_options(&GetAres(), &opts, ARES_OPT_SOCK_STATE_CB);
 	if (i != ARES_SUCCESS) {
 		CUtils::PrintError("Could not initialize c-ares: " + CString(ares_strerror(i)));
 		exit(-1);
 	}
 	DEBUG("Successfully initialized c-ares");
+
+	ev_check_init(&c, AresTimeoutCheck);
+	ev_check_start(EV_DEFAULT_UC_ &c);
 #endif
 }
 
 CSockManager::~CSockManager() {
 #ifdef HAVE_ARES
 	ares_destroy(GetAres());
+	ev_check_stop(EV_DEFAULT_UC_ &c);
 #endif
 }
 
 #ifdef HAVE_ARES
-int CSockManager::Select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
-{
-	int ret;
-	fd_set tmp;
-
-	// Csocket sometimes can use NULL for writefds and c-ares doesn't like NULLs here
-	if (writefds == NULL)
-	{
-		writefds = &tmp;
-		FD_ZERO(writefds);
-	}
-
-	// We assume that nfds is already the max. number of sockets allowed by
-	// the OS, so we don't need to update it here.
-	ares_fds(GetAres(), readfds, writefds);
-	ares_timeout(GetAres(), timeout, timeout);
-
-	ret = ::select(nfds, readfds, writefds, exceptfds, timeout);
-
-	ares_process(GetAres(), readfds, writefds);
-
-	return ret;
-}
-
 void CZNCSock::ares_callback(void *lookup, int status, int timeout, struct hostent *h) {
 	struct DNSLookup *p = (struct DNSLookup *) lookup;
 	p->bLookupDone = true;
@@ -205,7 +201,7 @@ unsigned int CSockManager::GetAnonConnectionCount(const CString &sIP) const {
 	unsigned int ret = 0;
 
 	for (it = begin(); it != end(); it++) {
-		CZNCSock *pSock = *it;
+		Csock *pSock = *it;
 		// Logged in CClients have "USR::<username>" as their sockname
 		if (pSock->GetRemoteIP() == sIP && pSock->GetSockName().Left(5) != "USR::") {
 			ret++;
@@ -216,3 +212,58 @@ unsigned int CSockManager::GetAnonConnectionCount(const CString &sIP) const {
 
 	return ret;
 }
+
+#ifdef HAVE_ARES
+static void SocketReadyCallback(EV_P_ ev_io *sock, int revents)
+{
+	ares_socket_t read_fd = ARES_SOCKET_BAD;
+	ares_socket_t write_fd = ARES_SOCKET_BAD;
+	ares_socket_t fd = (ares_socket_t) sock->fd;
+
+	if (revents & EV_READ)
+		read_fd = fd;
+	if (revents & EV_WRITE)
+		write_fd = fd;
+
+	ares_process_fd(GetAres(), read_fd, write_fd);
+}
+
+static void AresSocketCallback(void *data, ares_socket_t fd, int readable, int writeable)
+{
+#warning this is ugly and causes leaks, ideas?
+	static map<ares_socket_t, ev_io *> watchers;
+	map<ares_socket_t, ev_io *>::iterator it = watchers.find(fd);
+
+	if (!readable && !writeable)
+	{
+		// Remove that watcher
+		if (it != watchers.end())
+		{
+			ev_io_stop(EV_DEFAULT_UC_ it->second);
+			delete it->second;
+			watchers.erase(it);
+		}
+		return;
+	}
+
+	// c-ares either adds a new fd or changes an existing fd's settings
+	ev_io *io;
+	if (it != watchers.end())
+		io = it->second;
+	else {
+		io = new ev_io;
+		watchers[fd] = io;
+		ev_io_init(io, SocketReadyCallback, fd, 0);
+	}
+
+	int flags = 0;
+	if (readable)
+		flags |= EV_READ;
+	if (writeable)
+		flags |= EV_WRITE;
+
+	ev_io_stop(EV_DEFAULT_UC_ io);
+	ev_io_set(io, fd, flags);
+	ev_io_start(EV_DEFAULT_UC_ io);
+}
+#endif
