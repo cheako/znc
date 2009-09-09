@@ -1135,11 +1135,13 @@ bool Csock::Write( const char *data, int len )
 {
 	m_sSend.append( data, len );
 
-	if ( m_sSend.empty() )
+	if (m_eConState != CST_OK)
 		return( true );
 
-	if ( m_eConState != CST_OK )
+	if (m_sSend.empty()) {
+		ev_io_stop(EV_DEFAULT_UC_ &m_write_io);
 		return( true );
+	}
 
 	// rate shaping
 	u_int iBytesToSend = 0;
@@ -2078,12 +2080,23 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 	m_iLastCheckTimeoutTime = 0;
 }
 
-void Csock::DoReadSelect()
+void Csock::EventCallback(EV_P_ ev_io *io, int revents)
 {
-	if (GetType() == LISTENER)
-		DoAccept();
-	else
-		DoRead();
+	Csock *pSock = (Csock *) io->data;
+	if (revents & EV_WRITE) {
+		if (!pSock->IsConnected() )
+		{
+			pSock->SetIsConnected(true);
+			pSock->Connected();
+		}
+		pSock->Write("");
+	}
+	if (revents & EV_READ) {
+		if (pSock->GetType() == LISTENER)
+			pSock->DoAccept();
+		else
+			pSock->DoRead();
+	}
 }
 
 void Csock::DoAccept()
@@ -2216,10 +2229,8 @@ void Csock::DoRead()
 				PushBuff(cBuff(), bytes);
 
 				// Try to read more data from the socket
-				CS_DEBUG("did read, retry");
 				break;
 			}
 		}
 	}
-	CS_DEBUG("done");
 }

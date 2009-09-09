@@ -955,18 +955,9 @@ private:
 	//! making private for safety
 	Csock( const Csock & cCopy ) {}
 
-	void DoReadSelect();
+	static void EventCallback(EV_P_ ev_io *io, int revents);
 	void DoAccept();
 	void DoRead();
-
-	static void EventCallback(EV_P_ ev_io *io, int revents)
-	{
-		Csock *pSock = (Csock *) io->data;
-		if (revents & EV_WRITE)
-			pSock->Write("");
-		if (revents & EV_READ)
-			pSock->DoReadSelect();
-	}
 
 	ev_io	m_read_io, m_write_io;
 
