@@ -1350,7 +1350,22 @@ public:
 		{
 			T *pcSock = (*this)[a];
 
-			if ( ( pcSock->GetType() != T::OUTBOUND ) || ( pcSock->GetConState() == T::CST_OK ) )
+			Csock::ECloseType eCloseType = pcSock->GetCloseType();
+			if (eCloseType == T::CLT_NOW || eCloseType == T::CLT_DEREFERENCE ||
+					(eCloseType == T::CLT_AFTERWRITE && pcSock->GetWriteBuffer().empty()))
+				DelSock( a-- ); // close any socks that have requested it
+				continue;
+
+			if (pcSock->GetConState() == T::CST_OK) {
+				// We regularly call ReadPaused() on sockets
+				// that have paused reading so that they can
+				// un-pause if they want
+				if (pcSock->IsReadPaused())
+					pcSock->ReadPaused();
+				continue;
+			}
+
+			if (pcSock->GetType() != T::OUTBOUND)
 				continue;
 
 			if ( pcSock->GetConState() == T::CST_DNS )
@@ -1420,21 +1435,12 @@ public:
 		if ( ( iMilliNow - m_iCallTimeouts ) >= 1000 )
 		{
 			m_iCallTimeouts = iMilliNow;
-			// call timeout on all the sockets that recieved no data
 			for( unsigned int i = 0; i < this->size(); i++ )
 			{
-				Csock *pSock = (*this)[i];
-
-				Csock::ECloseType eCloseType = pSock->GetCloseType();
-				if( eCloseType == T::CLT_NOW || eCloseType == T::CLT_DEREFERENCE ||
-						( eCloseType == T::CLT_AFTERWRITE && pSock->GetWriteBuffer().empty() ) ) {
-					DelSock( i-- ); // close any socks that have requested it
-					continue;
-				} else
-					pSock->Cron(); // call the Cron handler here
+				(*this)[i]->Cron();
 			}
 
-			// run any Manager Crons we may have
+			// clean up the Cron handler here
 			Cron();
 		}
 	}
