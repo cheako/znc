@@ -742,8 +742,11 @@ public:
 	 * @param bCaseSensitive use strcmp or strcasecmp
 	 */
 	virtual void DelCron( const CS_STRING & sName, bool bDeleteAll = true, bool bCaseSensitive = true );
+#warning
+#if 0
 	//! delete cron by idx
 	virtual void DelCron( u_int iPos );
+#endif
 	//! delete cron by address
 	virtual void DelCronByAddr( CCron *pcCron );
 
@@ -922,7 +925,7 @@ public:
 	}
 
 	//! returns a const reference to the crons associated to this socket
-	const std::vector<CCron *> & GetCrons() const { return( m_vcCrons ); }
+	const std::set<CCron *> & GetCrons() const { return( m_vcCrons ); }
 
 	void SetSkipConnect( bool b ) { m_bSkipConnect = b; }
 
@@ -979,7 +982,7 @@ private:
 
 #endif /* HAVE_LIBSSL */
 
-	std::vector<CCron *>		m_vcCrons;
+	std::set<CCron *>		m_vcCrons;
 
 	//! Create the socket
 	int SOCKET( bool bListen = false );
@@ -1216,13 +1219,13 @@ public:
 
 	virtual void Cleanup()
 	{
-		while ( !this->empty() )
+		while (!this->empty())
 			DelSock( 0 );
 
-		for( u_int a = 0; a < m_vcCrons.size(); a++ )
-			CS_Delete( m_vcCrons[a] );
-
-		m_vcCrons.clear();
+		while (!m_vcCrons.empty()) {
+			delete *m_vcCrons.begin();
+			m_vcCrons.erase(m_vcCrons.begin());
+		}
 	}
 
 	/**
@@ -1553,9 +1556,9 @@ public:
 	}
 
 	//! add a cronjob at the manager level
-	virtual void AddCron( CCron *pcCron )
+	virtual void AddCron(CCron *pcCron)
 	{
-		m_vcCrons.push_back( pcCron );
+		m_vcCrons.insert(pcCron);
 	}
 
 	/**
@@ -1566,20 +1569,30 @@ public:
 	 */
 	virtual void DelCron( const CS_STRING & sName, bool bDeleteAll = true, bool bCaseSensitive = true )
 	{
-		for( u_int a = 0; a < m_vcCrons.size(); a++ )
+		std::set<CCron *>::iterator it = m_vcCrons.begin();
+
+		while (it != m_vcCrons.end())
 		{
 			int (*Cmp)(const char *, const char *) = ( bCaseSensitive ? strcmp : strcasecmp );
-			if ( Cmp( m_vcCrons[a]->GetName().c_str(), sName.c_str() ) == 0 )
+			CCron *pcCron = *it;
+
+			if (Cmp(pcCron->GetName().c_str(), sName.c_str()) == 0)
 			{
-				m_vcCrons[a]->Stop();
-				CS_Delete( m_vcCrons[a] );
-				m_vcCrons.erase( m_vcCrons.begin() + a-- );
-				if( !bDeleteAll )
+				pcCron->Stop();
+				m_vcCrons.erase(it++);
+				CS_Delete(pcCron);
+				// iterators pointing to other elements than the
+				// one being removed stay valid!
+
+				if (!bDeleteAll)
 					break;
-			}
+			} else
+				it++;
 		}
 	}
 
+#warning
+#if 0
 	//! delete cron by idx
 	virtual void DelCron( u_int iPos )
 	{
@@ -1590,22 +1603,20 @@ public:
 			m_vcCrons.erase( m_vcCrons.begin() + iPos );
 		}
 	}
+#endif
+
 	//! delete cron by address
 	virtual void DelCronByAddr( CCron *pcCron )
 	{
-		for( u_int a = 0; a < m_vcCrons.size(); a++ )
-		{
-			if ( m_vcCrons[a] == pcCron )
-			{
-				m_vcCrons[a]->Stop();
-				CS_Delete( m_vcCrons[a] );
-				m_vcCrons.erase( m_vcCrons.begin() + a );
-				return;
-			}
-		}
+		// First check if it's really in there, just because we can
+		if (m_vcCrons.find(pcCron) == m_vcCrons.end())
+			return;
+
+		m_vcCrons.erase(pcCron);
+		CS_Delete(pcCron);
 	}
 
-	std::vector<CCron *> & GetCrons() { return( m_vcCrons ); }
+	std::set<CCron *> & GetCrons() { return( m_vcCrons ); }
 
 	//! Delete a sock by addr
 	//! its position is looked up
@@ -1728,15 +1739,20 @@ public:
 	//! these crons get ran and checked in Loop()
 	virtual void Cron()
 	{
-		for( unsigned int a = 0; a < m_vcCrons.size(); a++ )
-		{
-			CCron *pcCron = m_vcCrons[a];
+		set<CCron *>::iterator it = m_vcCrons.begin();
 
-			if ( !pcCron->isValid() )
+		while (it != m_vcCrons.end())
+		{
+			CCron *pcCron = *it;
+
+			if (!pcCron->isValid())
 			{
-				CS_Delete( pcCron );
-				m_vcCrons.erase( m_vcCrons.begin() + a-- );
-			}
+				CS_Delete(pcCron);
+				m_vcCrons.erase(it++);
+				// std::set::erase() only invalidates iterators
+				// to the element being removed!
+			} else
+				it++;
 		}
 	}
 
@@ -1746,7 +1762,7 @@ public:
 	///////////
 	// members
 #warning todo use sets instead of vector (also for inheriting!)
-	std::vector<CCron *>		m_vcCrons;
+	std::set<CCron *>		m_vcCrons;
 	std::vector<T *>		m_vNeedAttentionSocks;
 	unsigned long long		m_iBytesRead;
 	unsigned long long		m_iBytesWritten;

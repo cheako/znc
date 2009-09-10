@@ -505,8 +505,10 @@ Csock::~Csock()
 	SetSock(-1);
 
 	// delete any left over crons
-	for( vector<CCron *>::size_type i = 0; i < m_vcCrons.size(); i++ )
-		CS_Delete( m_vcCrons[i] );
+	while (!m_vcCrons.empty()) {
+		delete *m_vcCrons.begin();
+		m_vcCrons.erase(m_vcCrons.begin());
+	}
 
 	ev_io_stop(EV_DEFAULT_UC_ &m_read_io);
 	ev_io_stop(EV_DEFAULT_UC_ &m_write_io);
@@ -579,14 +581,11 @@ void Csock::Copy( const Csock & cCopy )
 
 #endif /* HAVE_LIBSSL */
 
-	if( m_vcCrons.size() )
-	{
-		for( u_long a = 0; a < m_vcCrons.size(); a++ )
-		{
-			CS_Delete( m_vcCrons[a] );
-		}
-		m_vcCrons.clear();
+	while (!m_vcCrons.empty()) {
+		delete *m_vcCrons.begin();
+		m_vcCrons.erase(m_vcCrons.begin());
 	}
+
 	m_vcCrons			= cCopy.m_vcCrons;
 
 	m_sBindHost			= cCopy.m_sBindHost;
@@ -1716,39 +1715,54 @@ const CS_STRING & Csock::GetParentSockName() { return( m_sParentName ); }
 
 void Csock::Cron()
 {
-	for( vector<CCron *>::size_type a = 0; a < m_vcCrons.size(); a++ )
-	{
-		CCron *pcCron = m_vcCrons[a];
+	set<CCron *>::iterator it = m_vcCrons.begin();
 
-		if ( !pcCron->isValid() )
+	while (it != m_vcCrons.end())
+	{
+		CCron *pcCron = *it;
+
+		if (!pcCron->isValid())
 		{
-			CS_Delete( pcCron );
-			m_vcCrons.erase( m_vcCrons.begin() + a-- );
-		}
+			CS_Delete(pcCron);
+			m_vcCrons.erase(it++);
+			// std::set::erase() only invalidates iterators
+			// to the element being removed!
+		} else
+			it++;
 	}
 }
 
-void Csock::AddCron( CCron * pcCron )
+void Csock::AddCron(CCron * pcCron)
 {
-	m_vcCrons.push_back( pcCron );
+	m_vcCrons.insert(pcCron);
 }
 
 void Csock::DelCron( const CS_STRING & sName, bool bDeleteAll, bool bCaseSensitive )
 {
-	for( u_int a = 0; a < m_vcCrons.size(); a++ )
+	std::set<CCron *>::iterator it = m_vcCrons.begin();
+
+	while (it != m_vcCrons.end())
 	{
 		int (*Cmp)(const char *, const char *) = ( bCaseSensitive ? strcmp : strcasecmp );
-		if ( Cmp( m_vcCrons[a]->GetName().c_str(), sName.c_str() ) == 0 )
+		CCron *pcCron = *it;
+
+		if (Cmp(pcCron->GetName().c_str(), sName.c_str()) == 0)
 		{
-			m_vcCrons[a]->Stop();
-			CS_Delete( m_vcCrons[a] );
-			m_vcCrons.erase( m_vcCrons.begin() + a-- );
-			if( !bDeleteAll )
+			pcCron->Stop();
+			m_vcCrons.erase(it++);
+			CS_Delete(pcCron);
+			// iterators pointing to other elements than the
+			// one being removed stay valid!
+
+			if (!bDeleteAll)
 				break;
-		}
+		} else
+			it++;
 	}
 }
 
+#warning
+#if 0
 void Csock::DelCron( u_int iPos )
 {
 	if ( iPos < m_vcCrons.size() )
@@ -1758,19 +1772,16 @@ void Csock::DelCron( u_int iPos )
 		m_vcCrons.erase( m_vcCrons.begin() + iPos );
 	}
 }
+#endif
 
 void Csock::DelCronByAddr( CCron *pcCron )
 {
-	for( u_int a = 0; a < m_vcCrons.size(); a++ )
-	{
-		if ( m_vcCrons[a] == pcCron )
-		{
-			m_vcCrons[a]->Stop();
-			CS_Delete( m_vcCrons[a] );
-			m_vcCrons.erase( m_vcCrons.begin() + a );
-			return;
-		}
-	}
+	// First check if it's really in there, just because we can
+	if (m_vcCrons.find(pcCron) == m_vcCrons.end())
+		return;
+
+	m_vcCrons.erase(pcCron);
+	CS_Delete(pcCron);
 }
 
 void Csock::EnableReadLine() { m_bEnableReadLine = true; }
