@@ -1483,6 +1483,7 @@ public:
 
 #warning this assumes the socket is only once in the vector :(... better use a set?
 			m_vNeedAttentionSocks.erase(it);
+
 			break;
 		}
 	}
@@ -1648,10 +1649,14 @@ public:
 			m_iBytesWritten += pSock->GetBytesWritten();
 		}
 
-		RemoveAttention(pSock);
+		T * pTmpSock = pSock;
 
 		CS_Delete( pSock );
 		this->erase( this->begin() + iPos );
+
+		// Do this after the socket was deleted, the destructor could
+		// register the socket again (pTmpSock because CS_Delete eats babies)
+		RemoveAttention(pTmpSock);
 	}
 
 	/**
