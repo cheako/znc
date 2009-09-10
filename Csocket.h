@@ -1221,7 +1221,7 @@ public:
 
 	virtual void Cleanup()
 	{
-		while ( this->size() )
+		while ( !this->empty() )
 			DelSock( 0 );
 
 		for( u_int a = 0; a < m_vcCrons.size(); a++ )
