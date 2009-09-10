@@ -335,7 +335,6 @@ inline void TFD_CLR( u_int iSock, fd_set *set )
 }
 
 void __Perror( const CS_STRING & s, const char *pszFile, unsigned int iLineNo );
-unsigned long long millitime();
 
 
 /**
@@ -644,9 +643,7 @@ public:
 
 
 	//! Gets the starting time of this socket
-	unsigned long long GetStartTime() const;
-	//! Resets the start time
-	void ResetStartTime();
+	ev_tstamp GetStartTime() const;
 
 	//! Gets the amount of data read during the existence of the socket
 	unsigned long long GetBytesRead() const;
@@ -965,8 +962,9 @@ private:
 	CS_STRING	m_sSend, m_sPemPass, m_sLocalIP, m_sRemoteIP;
 	ECloseType	m_eCloseType;
 
-	unsigned long long	m_iBytesRead, m_iBytesWritten, m_iStartTime;
+	unsigned long long	m_iBytesRead, m_iBytesWritten;
 	unsigned int		m_iMaxStoredBufferLength, m_iTimeoutType;
+	ev_tstamp		m_tStartTime;
 
 	CSSockAddr 		m_address, m_bindhost;
 	bool			m_bIsIPv6, m_bSkipConnect;
@@ -1206,7 +1204,7 @@ class TSocketManager : protected CSocketManagerBase, public std::vector<T *>
 public:
 	TSocketManager() : CSocketManagerBase(), std::vector<T *>()
 	{
-		m_iCallTimeouts = millitime();
+		m_tCallTimeouts = ev_now(EV_DEFAULT_UC);
 
 		m_prepare.data = this;
 		ev_prepare_init(&m_prepare, Prepare);
@@ -1423,10 +1421,13 @@ public:
 #endif /* HAVE_LIBSSL */
 		}
 
-		unsigned long long iMilliNow = millitime();
-		if ( ( iMilliNow - m_iCallTimeouts ) >= 1000 )
+		ev_tstamp iNow = ev_now(EV_DEFAULT_UC);
+		ev_tstamp iDiff = iNow - m_tCallTimeouts;
+
+		// Either a second passed or the clock went backwards
+		if (iDiff >= 1 || iDiff < 0)
 		{
-			m_iCallTimeouts = iMilliNow;
+			m_tCallTimeouts = iNow;
 			for( unsigned int i = 0; i < this->size(); i++ )
 			{
 				(*this)[i]->Cron();
@@ -1708,9 +1709,9 @@ public:
 	///////////
 	// members
 	std::vector<CCron *>	m_vcCrons;
-	unsigned long long		m_iCallTimeouts;
 	unsigned long long		m_iBytesRead;
 	unsigned long long		m_iBytesWritten;
+	ev_tstamp			m_tCallTimeouts;
 	ev_prepare			m_prepare;
 };
 

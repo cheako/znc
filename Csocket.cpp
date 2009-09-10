@@ -399,23 +399,6 @@ void __Perror( const CS_STRING & s, const char *pszFile, unsigned int iLineNo )
 #endif /* __sun */
 }
 
-unsigned long long millitime()
-{
-	unsigned long long iTime = 0;
-#ifdef _WIN32
-	struct timeb tm;
-	ftime( &tm );
-	iTime = tm.time * 1000;
-	iTime += tm.millitm;
-#else
-	struct timeval tv;
-	gettimeofday( &tv, NULL );
-	iTime = (unsigned long long )tv.tv_sec * 1000;
-	iTime += ( (unsigned long long)tv.tv_usec / 1000 );
-#endif /* _WIN32 */
-	return( iTime );
-}
-
 #ifndef _NO_CSOCKET_NS // some people may not want to use a namespace
 }
 using namespace Csocket;
@@ -574,7 +557,7 @@ void Csock::Copy( const Csock & cCopy )
 
 	m_iBytesRead		= cCopy.m_iBytesRead;
 	m_iBytesWritten		= cCopy.m_iBytesWritten;
-	m_iStartTime		= cCopy.m_iStartTime;
+	m_tStartTime		= cCopy.m_tStartTime;
 	m_iMaxStoredBufferLength	= cCopy.m_iMaxStoredBufferLength;
 
 	SetTimeout(cCopy.GetTimeout(), cCopy.GetTimeoutType());
@@ -1457,8 +1440,7 @@ const CS_STRING & Csock::GetSockName() const { return( m_sSockName ); }
 void Csock::SetSockName( const CS_STRING & sName ) { m_sSockName = sName; }
 const CS_STRING & Csock::GetHostName() const { return( m_shostname ); }
 void Csock::SetHostName( const CS_STRING & sHostname ) { m_shostname = sHostname; }
-unsigned long long Csock::GetStartTime() const { return( m_iStartTime ); }
-void Csock::ResetStartTime() { m_iStartTime = 0; }
+ev_tstamp Csock::GetStartTime() const { return( m_tStartTime ); }
 unsigned long long Csock::GetBytesRead() const { return( m_iBytesRead ); }
 void Csock::ResetBytesRead() { m_iBytesRead = 0; }
 unsigned long long Csock::GetBytesWritten() const { return( m_iBytesWritten ); }
@@ -1466,7 +1448,10 @@ void Csock::ResetBytesWritten() { m_iBytesWritten = 0; }
 
 double Csock::GetAvgRead( unsigned long long iSample )
 {
-	unsigned long long iDifference = ( millitime() - m_iStartTime );
+	ev_tstamp iDifference = ev_now(EV_DEFAULT_UC) - m_tStartTime;
+
+	// We need seconds, not milliseconds
+	iSample /= 1000;
 
 	if ( ( m_iBytesRead == 0 ) || ( iSample > iDifference ) )
 		return( (double)m_iBytesRead );
@@ -1476,7 +1461,10 @@ double Csock::GetAvgRead( unsigned long long iSample )
 
 double Csock::GetAvgWrite( unsigned long long iSample )
 {
-	unsigned long long iDifference = ( millitime() - m_iStartTime );
+	ev_tstamp iDifference = ev_now(EV_DEFAULT_UC) - m_tStartTime;
+
+	// We need seconds, not milliseconds
+	iSample /= 1000;
 
 	if ( ( m_iBytesWritten == 0 ) || ( iSample > iDifference ) )
 		return( (double)m_iBytesWritten );
@@ -1976,7 +1964,7 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 	m_iLocalPort = 0;
 	m_iBytesRead = 0;
 	m_iBytesWritten = 0;
-	m_iStartTime = millitime();
+	m_tStartTime = ev_now(EV_DEFAULT_UC);
 	m_bPauseRead = false;
 	m_iTimeoutType = TMO_ALL;
 	m_eConState = CST_OK;	// default should be ok
