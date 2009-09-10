@@ -31,25 +31,23 @@ static ares_channel& GetAres() {
 	return m_ares;
 }
 
-#warning This is ugly :(
-static ev_check ares_check;
-static ev_prepare ares_prep;
-static ev_timer ares_timer;
-
-static void AresTimeoutCheck(EV_P_ ev_check *, int)
+void CSockManager::AresTimeoutCheck(EV_P_ ev_check *check, int)
 {
+	CSockManager *p = (CSockManager *) check->data;
+
 	// This makes c-ares process timeouts
 	ares_process_fd(GetAres(), ARES_SOCKET_BAD, ARES_SOCKET_BAD);
 
 	// We only use that timer to wake up the event loop, it doesn't actually
 	// ever fire an event
-	ev_timer_stop(EV_DEFAULT_UC_ &ares_timer);
+	ev_timer_stop(EV_DEFAULT_UC_ &p->m_ares_timer);
 }
 
-static void AresTimeoutPrepare(EV_P_ ev_prepare *, int)
+void CSockManager::AresTimeoutPrepare(EV_P_ ev_prepare *prep, int)
 {
 	struct timeval tv;
 	struct timeval *p_tv;
+	CSockManager *p = (CSockManager *) prep->data;
 
 	p_tv = ares_timeout(GetAres(), NULL, &tv);
 
@@ -61,8 +59,8 @@ static void AresTimeoutPrepare(EV_P_ ev_prepare *, int)
 	// Else we start a timer so that the event loop will wake us up.
 	// We sleep a little longer than we'd have to by "rounding" the timeout
 	// up to the next full second.
-	ev_timer_set(&ares_timer, tv.tv_sec + 1, 0);
-	ev_timer_start(EV_DEFAULT_UC_ &ares_timer);
+	ev_timer_set(&p->m_ares_timer, tv.tv_sec + 1, 0);
+	ev_timer_start(EV_DEFAULT_UC_ &p->m_ares_timer);
 }
 
 static void AresSocketCallback(void *data, ares_socket_t fd, int readable, int writeable);
@@ -94,24 +92,26 @@ CSockManager::CSockManager() : TSocketManager<CZNCSock>() {
 	}
 	DEBUG("Successfully initialized c-ares");
 
-	ev_check_init(&ares_check, AresTimeoutCheck);
-	ev_check_start(EV_DEFAULT_UC_ &ares_check);
+	ev_check_init(&m_ares_check, AresTimeoutCheck);
+	ev_check_start(EV_DEFAULT_UC_ &m_ares_check);
+	m_ares_check.data = this;
 
-	ev_prepare_init(&ares_prep, AresTimeoutPrepare);
+	ev_prepare_init(&m_ares_prep, AresTimeoutPrepare);
 	// Make sure this is executed after TSocketManager::Prepare
-	ev_set_priority(&ares_prep, EV_MINPRI);
-	ev_prepare_start(EV_DEFAULT_UC_ &ares_prep);
+	ev_set_priority(&m_ares_prep, EV_MINPRI);
+	ev_prepare_start(EV_DEFAULT_UC_ &m_ares_prep);
+	m_ares_prep.data = this;
 
-	ev_timer_init(&ares_timer, NULL, 0, 0);
+	ev_timer_init(&m_ares_timer, NULL, 0, 0);
 #endif
 }
 
 CSockManager::~CSockManager() {
 #ifdef HAVE_ARES
 	ares_destroy(GetAres());
-	ev_check_stop(EV_DEFAULT_UC_ &ares_check);
-	ev_prepare_stop(EV_DEFAULT_UC_ &ares_prep);
-	ev_timer_stop(EV_DEFAULT_UC_ &ares_timer);
+	ev_check_stop(EV_DEFAULT_UC_ &m_ares_check);
+	ev_prepare_stop(EV_DEFAULT_UC_ &m_ares_prep);
+	ev_timer_stop(EV_DEFAULT_UC_ &m_ares_timer);
 #endif
 }
 
