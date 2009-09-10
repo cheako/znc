@@ -1352,9 +1352,10 @@ public:
 
 			Csock::ECloseType eCloseType = pcSock->GetCloseType();
 			if (eCloseType == T::CLT_NOW || eCloseType == T::CLT_DEREFERENCE ||
-					(eCloseType == T::CLT_AFTERWRITE && pcSock->GetWriteBuffer().empty()))
+					(eCloseType == T::CLT_AFTERWRITE && pcSock->GetWriteBuffer().empty())) {
 				DelSock( a-- ); // close any socks that have requested it
 				continue;
+			}
 
 			if (pcSock->GetConState() == T::CST_OK) {
 				// We regularly call ReadPaused() on sockets
