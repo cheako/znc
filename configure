@@ -2807,13 +2807,57 @@ if test "x$GXX" = "xyes"; then
 	appendCXX -Wall -W -Wno-unused-parameter -Woverloaded-virtual -Wshadow
 fi
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for getopt_long in -lgnugetopt" >&5
-$as_echo_n "checking for getopt_long in -lgnugetopt... " >&6; }
-if test "${ac_cv_lib_gnugetopt_getopt_long+set}" = set; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for ev_time in -lev" >&5
+$as_echo_n "checking for ev_time in -lev... " >&6; }
+if test "${ac_cv_lib_ev_ev_time+set}" = set; then :
   $as_echo_n "(cached) " >&6
 else
   ac_check_lib_save_LIBS=$LIBS
-LIBS="-lgnugetopt  $LIBS"
+LIBS="-lev  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char ev_time ();
+int
+main ()
+{
+return ev_time ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  ac_cv_lib_ev_ev_time=yes
+else
+  ac_cv_lib_ev_ev_time=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_ev_ev_time" >&5
+$as_echo "$ac_cv_lib_ev_ev_time" >&6; }
+if test "x$ac_cv_lib_ev_ev_time" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBEV 1
+_ACEOF
+
+  LIBS="-lev $LIBS"
+
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing getopt_long" >&5
+$as_echo_n "checking for library containing getopt_long... " >&6; }
+if test "${ac_cv_search_getopt_long+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_func_search_save_LIBS=$LIBS
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -2832,23 +2876,35 @@ return getopt_long ();
   return 0;
 }
 _ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_gnugetopt_getopt_long=yes
-else
-  ac_cv_lib_gnugetopt_getopt_long=no
+for ac_lib in '' gnugetopt; do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_cxx_try_link "$LINENO"; then :
+  ac_cv_search_getopt_long=$ac_res
 fi
 rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
+    conftest$ac_exeext
+  if test "${ac_cv_search_getopt_long+set}" = set; then :
+  break
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_gnugetopt_getopt_long" >&5
-$as_echo "$ac_cv_lib_gnugetopt_getopt_long" >&6; }
-if test "x$ac_cv_lib_gnugetopt_getopt_long" = x""yes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBGNUGETOPT 1
-_ACEOF
+done
+if test "${ac_cv_search_getopt_long+set}" = set; then :
 
-  LIBS="-lgnugetopt $LIBS"
+else
+  ac_cv_search_getopt_long=no
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_getopt_long" >&5
+$as_echo "$ac_cv_search_getopt_long" >&6; }
+ac_res=$ac_cv_search_getopt_long
+if test "$ac_res" != no; then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
 
 fi
 

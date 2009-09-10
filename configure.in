@@ -118,7 +118,8 @@ if test "x$GXX" = "xyes"; then
 	appendCXX -Wall -W -Wno-unused-parameter -Woverloaded-virtual -Wshadow
 fi
 
-AC_CHECK_LIB( gnugetopt, getopt_long,)
+AC_CHECK_LIB([ev], [ev_time])
+AC_SEARCH_LIBS([getopt_long], [gnugetopt])
 AC_CHECK_FUNC([lstat], [appendCXX -DHAVE_LSTAT])
 
 if test "x$ARES" = "xyes"; then
