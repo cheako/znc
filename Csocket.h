@@ -1230,14 +1230,6 @@ public:
 		m_vcCrons.clear();
 	}
 
-	enum EMessages
-	{
-		SUCCESS			= 0,	//! Select returned at least 1 fd ready for action
-		SELECT_ERROR	= -1,	//! An Error Happened, Probably dead socket. That socket is returned if available
-		SELECT_TIMEOUT	= -2,	//! Select Timeout
-		SELECT_TRYAGAIN	= -3	//! Select calls for you to try again
-	};
-
 	/**
 	* Create a connection
 	*
