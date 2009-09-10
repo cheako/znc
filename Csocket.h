@@ -238,6 +238,10 @@ public:
 	}
 
 	virtual void AddSock(Csock *pcSock, const CS_STRING & sSockName) = 0;
+
+	// The socket is already added to the manager but it needs some
+	// attention by TSocketManagerBase::Prepare()
+	virtual void AddAttentionSock(Csock *pcSock) = 0;
 };
 
 /**
@@ -444,14 +448,6 @@ public:
 		READ_TIMEDOUT		= -4			//!< Connection timed out
 	};
 
-	enum EFSelect
-	{
-		SEL_OK				= 0,		//!< Select passed ok
-		SEL_TIMEOUT			= -1,		//!< Select timed out
-		SEL_EAGAIN			= -2,		//!< Select wants you to try again
-		SEL_ERR				= -3		//!< Select recieved an error
-	};
-
 	enum ESSLMethod
 	{
 		SSL23				= 0,
@@ -606,9 +602,6 @@ public:
 	void SetTimeoutType( u_int iTimeoutType );
 	int GetTimeout() const;
 	u_int GetTimeoutType() const;
-
-	//! closes the socket if it has timed out
-	static void CheckTimeout(EV_P_ ev_timer *timeout, int revents);
 
 	/**
 	* pushes data up on the buffer, if a line is ready
@@ -875,7 +868,7 @@ public:
 	//! returns the current connection state
 	ECONState GetConState() const { return( m_eConState ); }
 	//! sets the connection state to eState
-	void SetConState( ECONState eState ) { m_eConState = eState; }
+	void SetConState( ECONState eState );
 
 	//! grabs fd's for the sockets
 	bool CreateSocksFD()
@@ -945,6 +938,9 @@ public:
 private:
 	//! making private for safety
 	Csock( const Csock & cCopy ) {}
+
+	//! closes the socket if it has timed out
+	static void CheckTimeout(EV_P_ ev_timer *timeout, int revents);
 
 	static void EventCallback(EV_P_ ev_io *io, int revents);
 	void DoAccept();
@@ -1335,15 +1331,17 @@ public:
 
 	void Prepare()
 	{
-#warning sloooow :(
-		for( u_int a = 0; a < this->size(); a++ )
+		for( u_int a = 0; a < m_vNeedAttentionSocks.size(); a++ )
 		{
-			T *pcSock = (*this)[a];
+			T *pcSock = m_vNeedAttentionSocks[a];
 
+			// close any socks that have requested it
 			Csock::ECloseType eCloseType = pcSock->GetCloseType();
 			if (eCloseType == T::CLT_NOW || eCloseType == T::CLT_DEREFERENCE ||
 					(eCloseType == T::CLT_AFTERWRITE && pcSock->GetWriteBuffer().empty())) {
-				DelSock( a-- ); // close any socks that have requested it
+				// This will also remove it from m_vNeedAttentionSocks
+				DelSockByAddr(pcSock);
+				a--;
 				continue;
 			}
 
@@ -1353,18 +1351,27 @@ public:
 				// un-pause if they want
 				if (pcSock->IsReadPaused())
 					pcSock->ReadPaused();
+				else
+				{
+					RemoveAttention(pcSock);
+					a--;
+				}
 				continue;
 			}
 
-			if (pcSock->GetType() != T::OUTBOUND)
+			if (pcSock->GetType() != T::OUTBOUND) {
+				RemoveAttention(pcSock);
+				a--;
 				continue;
+			}
 
 			if ( pcSock->GetConState() == T::CST_DNS )
 			{
 				if ( pcSock->DNSLookup( T::DNS_VHOST ) == ETIMEDOUT )
 				{
 					pcSock->SockError( EDOM );
-					DelSock( a-- );
+					DelSockByAddr(pcSock);
+					a--;
 					continue;
 				}
 			}
@@ -1374,7 +1381,8 @@ public:
 				if ( !pcSock->SetupVHost() )
 				{
 					pcSock->SockError( errno );
-					DelSock( a-- );
+					DelSockByAddr(pcSock);
+					a--;
 					continue;
 				}
 			}
@@ -1384,7 +1392,8 @@ public:
 				if ( pcSock->DNSLookup( T::DNS_DEST ) == ETIMEDOUT )
 				{
 					pcSock->SockError( EADDRNOTAVAIL );
-					DelSock( a-- );
+					DelSockByAddr(pcSock);
+					a--;
 					continue;
 				}
 			}
@@ -1397,7 +1406,8 @@ public:
 					else
 						pcSock->SockError( GetSockError() );
 
-					DelSock( a-- );
+					DelSockByAddr(pcSock);
+					a--;
 					continue;
 				}
 			}
@@ -1413,7 +1423,8 @@ public:
 						else
 							pcSock->SockError( GetSockError() == 0 ? ECONNABORTED : GetSockError() );
 
-						DelSock( a-- );
+						DelSockByAddr(pcSock);
+						a--;
 						continue;
 					}
 				}
@@ -1438,7 +1449,7 @@ public:
 		}
 	}
 
-	void AddSock(Csock *pcSock, const CS_STRING & sSockName)
+	virtual void AddSock(Csock *pcSock, const CS_STRING & sSockName)
 	{
 		AddSock((T *) pcSock, sSockName);
 	}
@@ -1452,6 +1463,28 @@ public:
 		pcSock->SetSockName( sSockName );
 		push_back( pcSock );
 		pcSock->SetManager(this);
+		AddAttentionSock((Csock *) pcSock);
+	}
+
+	virtual void AddAttentionSock(Csock *pcSock)
+	{
+		// Make sure it's not added multiple times
+		RemoveAttention(pcSock);
+		m_vNeedAttentionSocks.push_back((T *) pcSock);
+	}
+
+	virtual void RemoveAttention(Csock *pcSock)
+	{
+		typename std::vector<T *>::iterator it = m_vNeedAttentionSocks.begin();
+
+		for (; it != m_vNeedAttentionSocks.end(); it++) {
+			if (*it != pcSock)
+				continue;
+
+#warning this assumes the socket is only once in the vector :(... better use a set?
+			m_vNeedAttentionSocks.erase(it);
+			break;
+		}
 	}
 
 	//! returns a pointer to the FIRST sock found by port or NULL on no match
@@ -1615,6 +1648,8 @@ public:
 			m_iBytesWritten += pSock->GetBytesWritten();
 		}
 
+		RemoveAttention(pSock);
+
 		CS_Delete( pSock );
 		this->erase( this->begin() + iPos );
 	}
@@ -1708,7 +1743,9 @@ public:
 
 	///////////
 	// members
-	std::vector<CCron *>	m_vcCrons;
+#warning todo use sets instead of vector (also for inheriting!)
+	std::vector<CCron *>		m_vcCrons;
+	std::vector<T *>		m_vNeedAttentionSocks;
 	unsigned long long		m_iBytesRead;
 	unsigned long long		m_iBytesWritten;
 	ev_tstamp			m_tCallTimeouts;

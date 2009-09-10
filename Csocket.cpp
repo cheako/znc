@@ -590,10 +590,11 @@ void Csock::Copy( const Csock & cCopy )
 	}
 	m_vcCrons			= cCopy.m_vcCrons;
 
-	m_eConState			= cCopy.m_eConState;
 	m_sBindHost			= cCopy.m_sBindHost;
 	m_iCurBindCount		= cCopy.m_iCurBindCount;
 	m_iDNSTryCount		= cCopy.m_iDNSTryCount;
+
+	SetConState(cCopy.GetConState());
 }
 
 Csock & Csock::operator<<( const CS_STRING & s )
@@ -662,9 +663,9 @@ bool Csock::Connect( const CS_STRING & sBindHost, bool bSkipSetup )
 {
 	if( m_bSkipConnect )
 	{ // this was already called, so skipping now. this is to allow easy pass through
-		if ( m_eConState != CST_OK )
+		if ( GetConState() != CST_OK )
 		{
-			m_eConState = ( GetSSL() ? CST_CONNECTSSL : CST_OK );
+			SetConState(GetSSL() ? CST_CONNECTSSL : CST_OK);
 		}
 		return( true );
 	}
@@ -731,9 +732,9 @@ bool Csock::Connect( const CS_STRING & sBindHost, bool bSkipSetup )
 		return( false );
 	}
 
-	if ( m_eConState != CST_OK )
+	if ( GetConState() != CST_OK )
 	{
-		m_eConState = ( GetSSL() ? CST_CONNECTSSL : CST_OK );
+		SetConState(GetSSL() ? CST_CONNECTSSL : CST_OK);
 	}
 
 	return( true );
@@ -1087,8 +1088,8 @@ bool Csock::ConnectSSL( const CS_STRING & sBindhost )
 	} else
 		bPass = true;
 
-	if ( m_eConState != CST_OK )
-		m_eConState = CST_OK;
+	if ( GetConState() != CST_OK )
+		SetConState(CST_OK);
 	return( bPass );
 #else
 	return( false );
@@ -1099,7 +1100,7 @@ bool Csock::Write( const char *data, int len )
 {
 	m_sSend.append( data, len );
 
-	if (m_eConState != CST_OK)
+	if (GetConState() != CST_OK)
 		return( true );
 
 	if (m_sSend.empty()) {
@@ -1360,8 +1361,15 @@ int Csock::GetRSock() const { return( m_read_io.fd ); }
 int Csock::GetWSock() const { return( m_write_io.fd ); }
 int Csock::GetSock() const { return( GetRSock() ); }
 void Csock::ResetTimer() { ev_timer_again(EV_DEFAULT_UC_ &m_io_timeout); }
-void Csock::PauseRead() { m_bPauseRead = true; ev_io_stop(EV_DEFAULT_UC_ &m_read_io); }
 bool Csock::IsReadPaused() { return( m_bPauseRead ); }
+
+void Csock::PauseRead()
+{
+	m_bPauseRead = true;
+	ev_io_stop(EV_DEFAULT_UC_ &m_read_io);
+	if (m_Manager)
+		m_Manager->AddAttentionSock(this);
+}
 
 void Csock::UnPauseRead()
 {
@@ -1537,6 +1545,8 @@ void Csock::SetPort( u_short iPort ) { m_iport = iPort; }
 void Csock::Close( ECloseType eCloseType )
 {
 	m_eCloseType = eCloseType;
+	if (m_Manager)
+		m_Manager->AddAttentionSock(this);
 }
 
 bool Csock::GetSSL() { return( m_bssl ); }
@@ -1786,6 +1796,13 @@ int Csock::GetPending()
 #endif /* HAVE_LIBSSL */
 }
 
+void Csock::SetConState(ECONState eState)
+{
+	m_eConState = eState;
+	if (m_Manager && eState != CST_OK)
+		m_Manager->AddAttentionSock(this);
+}
+
 int Csock::GetAddrInfo( const CS_STRING & sHostname, CSSockAddr & csSockAddr )
 {
 	return( ::GetAddrInfo( sHostname, this, csSockAddr ) );
@@ -1797,8 +1814,8 @@ int Csock::DNSLookup( EDNSLType eDNSLType )
 	{
 		if ( m_sBindHost.empty() )
 		{
-			if ( m_eConState != CST_OK )
-				m_eConState = CST_DESTDNS; // skip binding, there is no vhost
+			if ( GetConState() != CST_OK )
+				SetConState(CST_DESTDNS); // skip binding, there is no vhost
 			return( 0 );
 		}
 
@@ -1833,8 +1850,8 @@ int Csock::DNSLookup( EDNSLType eDNSLType )
 			m_iDNSTryCount = 0;
 			return( ETIMEDOUT );
 		}
-		if ( m_eConState != CST_OK )
-			m_eConState = ( ( eDNSLType == DNS_VHOST ) ? CST_BINDVHOST : CST_CONNECT );
+		if ( GetConState() != CST_OK )
+			SetConState(eDNSLType == DNS_VHOST ? CST_BINDVHOST : CST_CONNECT);
 		m_iDNSTryCount = 0;
 		return( 0 );
 	}
@@ -1856,8 +1873,8 @@ bool Csock::SetupVHost()
 {
 	if ( m_sBindHost.empty() )
 	{
-		if ( m_eConState != CST_OK )
-			m_eConState = CST_DESTDNS;
+		if ( GetConState() != CST_OK )
+			SetConState(CST_DESTDNS);
 		return( true );
 	}
 	int iRet = -1;
@@ -1870,8 +1887,8 @@ bool Csock::SetupVHost()
 
 	if ( iRet == 0 )
 	{
-		if ( m_eConState != CST_OK )
-			m_eConState = CST_DESTDNS;
+		if ( GetConState() != CST_OK )
+			SetConState(CST_DESTDNS);
 		return( true );
 	}
 	m_iCurBindCount++;
@@ -1972,6 +1989,7 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 	m_iCurBindCount = 0;
 	m_bIsIPv6 = false;
 	m_bSkipConnect = false;
+	m_Manager = NULL;
 }
 
 void Csock::EventCallback(EV_P_ ev_io *io, int revents)
@@ -2029,9 +2047,16 @@ void Csock::DoAccept()
 	NewpcSock->SetIPv6(GetIPv6());
 
 	bool bAddSock = true;
+
+	if (!m_Manager)
+	{
+		CS_DEBUG("Listening socket without a manager, dropping new connection :(");
+		bAddSock = false;
+	}
+
 #ifdef HAVE_LIBSSL
 	// is this ssl ?
-	if ( GetSSL() )
+	if ( GetSSL() && bAddSock )
 	{
 		NewpcSock->SetCipher( GetCipher() );
 		NewpcSock->SetPemLocation( GetPemLocation() );
@@ -2050,7 +2075,6 @@ void Csock::DoAccept()
 			std::stringstream s;
 			s << sHost << ":" << port;
 			m_Manager->AddSock( NewpcSock,  s.str() );
-#warning this m_Manager pointer is FRAGILE! :(
 		} else
 			m_Manager->AddSock( NewpcSock, NewpcSock->GetSockName() );
 	} else
