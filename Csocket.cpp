@@ -531,7 +531,6 @@ void Csock::Copy( const Csock & cCopy )
 	SetRSock(cCopy.GetRSock());
 	SetWSock(cCopy.GetWSock());
 
-	m_iTcount		= cCopy.m_iTcount;
 	m_iport			= cCopy.m_iport;
 	m_iRemotePort	= cCopy.m_iRemotePort;
 	m_iLocalPort	= cCopy.m_iLocalPort;
@@ -592,7 +591,6 @@ void Csock::Copy( const Csock & cCopy )
 
 	m_sBindHost			= cCopy.m_sBindHost;
 	m_iCurBindCount		= cCopy.m_iCurBindCount;
-	m_iDNSTryCount		= cCopy.m_iDNSTryCount;
 
 	SetConState(cCopy.GetConState());
 }
@@ -1847,25 +1845,16 @@ int Csock::DNSLookup( EDNSLType eDNSLType )
 	{
 		if( !CreateSocksFD() )
 		{
-			m_iDNSTryCount = 0;
 			return( ETIMEDOUT );
 		}
 		if ( GetConState() != CST_OK )
 			SetConState(eDNSLType == DNS_VHOST ? CST_BINDVHOST : CST_CONNECT);
-		m_iDNSTryCount = 0;
 		return( 0 );
 	}
 	else if ( iRet == EAGAIN )
 	{
-		m_iDNSTryCount++;
-		if ( m_iDNSTryCount > 20 )
-		{
-			m_iDNSTryCount = 0;
-			return( ETIMEDOUT );
-		}
 		return( EAGAIN );
 	}
-	m_iDNSTryCount = 0;
 	return( ETIMEDOUT );
 }
 
@@ -1962,7 +1951,6 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 	m_ssl_ctx = NULL;
 	m_iRequireClientCertFlags = 0;
 #endif /* HAVE_LIBSSL */
-	m_iTcount = 0;
 	SetSock(-1);
 	m_bssl = false;
 	m_bIsConnected = false;
@@ -1985,7 +1973,6 @@ void Csock::Init( const CS_STRING & sHostname, u_short iport, int itimeout )
 	m_bPauseRead = false;
 	m_iTimeoutType = TMO_ALL;
 	m_eConState = CST_OK;	// default should be ok
-	m_iDNSTryCount = 0;
 	m_iCurBindCount = 0;
 	m_bIsIPv6 = false;
 	m_bSkipConnect = false;

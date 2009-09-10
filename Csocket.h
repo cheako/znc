@@ -951,7 +951,7 @@ private:
 
 	// NOTE! if you add any new members, be sure to add them to Copy()
 	u_short		m_iport, m_iRemotePort, m_iLocalPort;
-	int			m_iConnType, m_iMethod, m_iTcount;
+	int			m_iConnType, m_iMethod;
 	bool		m_bssl, m_bIsConnected, m_bFullsslAccept;
 	bool		m_bsslEstablished, m_bEnableReadLine, m_bPauseRead;
 	CS_STRING	m_shostname, m_sbuffer, m_sSockName, m_sPemFile, m_sCipherType, m_sParentName;
@@ -988,7 +988,7 @@ private:
 	// Connection State Info
 	ECONState		m_eConState;
 	CS_STRING		m_sBindHost;
-	u_int			m_iCurBindCount, m_iDNSTryCount;
+	u_int			m_iCurBindCount;
 
 	CSocketManagerBase*	m_Manager;
 };
