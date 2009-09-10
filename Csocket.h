@@ -1432,7 +1432,6 @@ public:
 		}
 
 		unsigned long long iMilliNow = millitime();
-#warning what if we force-close a socket and then sleep for a while?
 		if ( ( iMilliNow - m_iCallTimeouts ) >= 1000 )
 		{
 			m_iCallTimeouts = iMilliNow;

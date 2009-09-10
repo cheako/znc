@@ -1117,11 +1117,13 @@ bool Csock::Write( const char *data, int len )
 	m_sSend.append( data, len );
 
 	if (m_eConState != CST_OK)
-#warning TODO this will cause spinning if the ev_io isnt properly started / stopped :(
 		return( true );
 
 	if (m_sSend.empty()) {
-		ev_io_stop(EV_DEFAULT_UC_ &m_write_io);
+		// while we are not connected yet, we use m_write_io to find out
+		// when we are connected, so we may not stop it in this case.
+		if (IsConnected())
+			ev_io_stop(EV_DEFAULT_UC_ &m_write_io);
 		return( true );
 	}
 
@@ -2130,8 +2132,6 @@ void Csock::DoRead()
 				// Call ReadData() before PushBuff() so that it is called before the ReadLine() event - LD  07/18/05
 				ReadData(cBuff(), bytes);
 				PushBuff(cBuff(), bytes);
-
-				// Try to read more data from the socket
 				break;
 			}
 		}
