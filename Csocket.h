@@ -79,11 +79,8 @@
 #endif /* __sun */
 
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <set>
-#include <map>
-#include <algorithm>
 
 #include <ev.h>
 

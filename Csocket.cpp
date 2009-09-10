@@ -36,7 +36,7 @@
 #include <sys/param.h>
 #endif /* __NetBSD__ */
 
-
+#include <sstream>
 #include <list>
 
 #define CS_SRANDBUFFER 128
