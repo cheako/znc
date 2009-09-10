@@ -1532,25 +1532,25 @@ public:
 		return( NULL );
 	}
 
-	virtual std::vector<T *> FindSocksByName( const CS_STRING & sName )
+	virtual std::set<T *> FindSocksByName( const CS_STRING & sName )
 	{
-		std::vector<T *> vpSocks;
+		std::set<T *> vpSocks;
 
 		for( unsigned int i = 0; i < this->size(); i++ )
 			if ( (*this)[i]->GetSockName() == sName )
-				vpSocks.push_back( (*this)[i] );
+				vpSocks.insert( (*this)[i] );
 
 		return( vpSocks );
 	}
 
 	//! returns a vector of pointers to socks with sHostname as being connected
-	virtual std::vector<T *> FindSocksByRemoteHost( const CS_STRING & sHostname )
+	virtual std::set<T *> FindSocksByRemoteHost( const CS_STRING & sHostname )
 	{
-		std::vector<T *> vpSocks;
+		std::set<T *> vpSocks;
 
 		for( unsigned int i = 0; i < this->size(); i++ )
 			if ( (*this)[i]->GetHostName() == sHostname )
-				vpSocks.push_back( (*this)[i] );
+				vpSocks.insert( (*this)[i] );
 
 		return( vpSocks );
 	}
@@ -1739,7 +1739,7 @@ public:
 	//! these crons get ran and checked in Loop()
 	virtual void Cron()
 	{
-		set<CCron *>::iterator it = m_vcCrons.begin();
+		std::set<CCron *>::iterator it = m_vcCrons.begin();
 
 		while (it != m_vcCrons.end())
 		{

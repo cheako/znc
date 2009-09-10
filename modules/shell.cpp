@@ -48,11 +48,11 @@ public:
 	}
 
 	virtual ~CShellMod() {
-		vector<CZNCSock*> vSocks = m_pManager->FindSocksByName("SHELL");
+		set<CZNCSock*> vSocks = m_pManager->FindSocksByName("SHELL");
+		set<CZNCSock*>::iterator it;
 
-		for (unsigned int a = 0; a < vSocks.size(); a++) {
-			m_pManager->DelSockByAddr(vSocks[a]);
-		}
+		for (it = vSocks.begin(); it != vSocks.end(); it++)
+			m_pManager->DelSockByAddr(*it);
 	}
 
 	virtual bool OnLoad(const CString& sArgs, CString& sMessage)
