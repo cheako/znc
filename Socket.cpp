@@ -37,6 +37,7 @@ static void AresTimeoutCheck(EV_P_ ev_check *p, int revents)
 {
 	// This makes c-ares process timeouts
 	ares_process_fd(GetAres(), ARES_SOCKET_BAD, ARES_SOCKET_BAD);
+#warning TODO: Figure out when c-ares wants to be woken up and somehow use those timeouts
 }
 
 static void AresSocketCallback(void *data, ares_socket_t fd, int readable, int writeable);
