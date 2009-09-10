@@ -670,11 +670,14 @@ bool CIRCSock::OnPrivCTCP(CNick& Nick, CString& sMessage) {
 		} else if (sType.Equals("ACCEPT")) {
 			// Need to lookup the connection by port, filter the port, and forward to the user
 			CSockManager& Manager = CZNC::Get().GetManager();
+			CSockManager::const_iterator it;
 
-			for (unsigned int a = 0; a < Manager.size(); a++) {
-				CDCCBounce* pSock = (CDCCBounce*) Manager[a];
+			for (it = Manager.begin(); it != Manager.end(); it++) {
+				CZNCSock *pcSock = *it;
 
-				if (pSock && pSock->GetSockName().Equals("DCC::", false, 5)) {
+				if (pcSock && pcSock->GetSockName().Equals("DCC::", false, 5)) {
+					CDCCBounce* pSock = (CDCCBounce*) pcSock;
+
 					if (pSock->GetUserPort() == sMessage.Token(3).ToUShort()) {
 						m_pUser->PutUser(":" + Nick.GetNickMask() + " PRIVMSG " + GetNick() + " :\001DCC " + sType + " " + sFile + " " + CString(pSock->GetLocalPort()) + " " + sMessage.Token(4) + "\001");
 					}

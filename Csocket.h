@@ -78,7 +78,6 @@
 #include <fcntl.h>
 #endif /* __sun */
 
-#include <vector>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -742,11 +741,6 @@ public:
 	 * @param bCaseSensitive use strcmp or strcasecmp
 	 */
 	virtual void DelCron( const CS_STRING & sName, bool bDeleteAll = true, bool bCaseSensitive = true );
-#warning
-#if 0
-	//! delete cron by idx
-	virtual void DelCron( u_int iPos );
-#endif
 	//! delete cron by address
 	virtual void DelCronByAddr( CCron *pcCron );
 
@@ -925,7 +919,7 @@ public:
 	}
 
 	//! returns a const reference to the crons associated to this socket
-	const std::set<CCron *> & GetCrons() const { return( m_vcCrons ); }
+	const std::set<CCron *> & GetCrons() const { return( m_sCrons ); }
 
 	void SetSkipConnect( bool b ) { m_bSkipConnect = b; }
 
@@ -982,7 +976,7 @@ private:
 
 #endif /* HAVE_LIBSSL */
 
-	std::set<CCron *>		m_vcCrons;
+	std::set<CCron *>		m_sCrons;
 
 	//! Create the socket
 	int SOCKET( bool bListen = false );
@@ -1199,10 +1193,10 @@ public:
 */
 
 template<class T>
-class TSocketManager : protected CSocketManagerBase, public std::vector<T *>
+class TSocketManager : protected CSocketManagerBase
 {
 public:
-	TSocketManager() : CSocketManagerBase(), std::vector<T *>()
+	TSocketManager() : CSocketManagerBase()
 	{
 		m_tCallTimeouts = ev_now(EV_DEFAULT_UC);
 
@@ -1219,12 +1213,14 @@ public:
 
 	virtual void Cleanup()
 	{
-		while (!this->empty())
-			DelSock( 0 );
+		while (!m_sSocks.empty()) {
+			delete *m_sSocks.begin();
+			m_sSocks.erase(m_sSocks.begin());
+		}
 
-		while (!m_vcCrons.empty()) {
-			delete *m_vcCrons.begin();
-			m_vcCrons.erase(m_vcCrons.begin());
+		while (!m_sCrons.empty()) {
+			delete *m_sCrons.begin();
+			m_sCrons.erase(m_sCrons.begin());
 		}
 	}
 
@@ -1335,9 +1331,15 @@ public:
 
 	void Prepare()
 	{
-		for( u_int a = 0; a < m_vNeedAttentionSocks.size(); a++ )
+		typename std::set<T *>::iterator it = m_sNeedAttentionSocks.begin();
+
+		while (it != m_sNeedAttentionSocks.end())
 		{
-			T *pcSock = m_vNeedAttentionSocks[a];
+			T *pcSock = *it;
+
+			// We don't need that iterator anymore, make it point to
+			// the next item.
+			it++;
 
 			// close any socks that have requested it
 			Csock::ECloseType eCloseType = pcSock->GetCloseType();
@@ -1345,7 +1347,6 @@ public:
 					(eCloseType == T::CLT_AFTERWRITE && pcSock->GetWriteBuffer().empty())) {
 				// This will also remove it from m_vNeedAttentionSocks
 				DelSockByAddr(pcSock);
-				a--;
 				continue;
 			}
 
@@ -1356,16 +1357,12 @@ public:
 				if (pcSock->IsReadPaused())
 					pcSock->ReadPaused();
 				else
-				{
 					RemoveAttention(pcSock);
-					a--;
-				}
 				continue;
 			}
 
 			if (pcSock->GetType() != T::OUTBOUND) {
 				RemoveAttention(pcSock);
-				a--;
 				continue;
 			}
 
@@ -1375,7 +1372,6 @@ public:
 				{
 					pcSock->SockError( EDOM );
 					DelSockByAddr(pcSock);
-					a--;
 					continue;
 				}
 			}
@@ -1386,7 +1382,6 @@ public:
 				{
 					pcSock->SockError( errno );
 					DelSockByAddr(pcSock);
-					a--;
 					continue;
 				}
 			}
@@ -1397,7 +1392,6 @@ public:
 				{
 					pcSock->SockError( EADDRNOTAVAIL );
 					DelSockByAddr(pcSock);
-					a--;
 					continue;
 				}
 			}
@@ -1411,7 +1405,6 @@ public:
 						pcSock->SockError( GetSockError() );
 
 					DelSockByAddr(pcSock);
-					a--;
 					continue;
 				}
 			}
@@ -1428,7 +1421,6 @@ public:
 							pcSock->SockError( GetSockError() == 0 ? ECONNABORTED : GetSockError() );
 
 						DelSockByAddr(pcSock);
-						a--;
 						continue;
 					}
 				}
@@ -1443,9 +1435,10 @@ public:
 		if (iDiff >= 1 || iDiff < 0)
 		{
 			m_tCallTimeouts = iNow;
-			for( unsigned int i = 0; i < this->size(); i++ )
+
+			for (const_iterator it2 = begin(); it2 != end(); it2++)
 			{
-				(*this)[i]->Cron();
+				(*it2)->Cron();
 			}
 
 			// clean up the Cron handler here
@@ -1465,36 +1458,28 @@ public:
 	virtual void AddSock( T *pcSock, const CS_STRING & sSockName )
 	{
 		pcSock->SetSockName( sSockName );
-		push_back( pcSock );
+		m_sSocks.insert(pcSock);
 		pcSock->SetManager(this);
 		AddAttentionSock((Csock *) pcSock);
 	}
 
 	virtual void AddAttentionSock(Csock *pcSock)
 	{
-		// Make sure it's not added multiple times
-		RemoveAttention(pcSock);
-		m_vNeedAttentionSocks.push_back((T *) pcSock);
+		m_sNeedAttentionSocks.insert((T *) pcSock);
 	}
 
 	virtual void RemoveAttention(Csock *pcSock)
 	{
-		typename std::vector<T *>::iterator it =
-			std::find(m_vNeedAttentionSocks.begin(),
-					m_vNeedAttentionSocks.end(), pcSock);
-
-#warning this assumes the socket is only once in the vector :(... better use a set?
-		if (it != m_vNeedAttentionSocks.end())
-			m_vNeedAttentionSocks.erase(it);
+		m_sNeedAttentionSocks.erase((T *) pcSock);
 	}
 
 	//! returns a pointer to the FIRST sock found by port or NULL on no match
 	virtual T * FindSockByRemotePort( u_short iPort )
 	{
-		for( unsigned int i = 0; i < this->size(); i++ )
+		for (const_iterator it = begin(); it != end(); it++)
 		{
-			if ( (*this)[i]->GetRemotePort() == iPort )
-				return( (*this)[i] );
+			if ((*it)->GetRemotePort() == iPort)
+				return *it;
 		}
 
 		return( NULL );
@@ -1503,9 +1488,9 @@ public:
 	//! returns a pointer to the FIRST sock found by port or NULL on no match
 	virtual T * FindSockByLocalPort( u_short iPort )
 	{
-		for( unsigned int i = 0; i < this->size(); i++ )
-			if ( (*this)[i]->GetLocalPort() == iPort )
-				return( (*this)[i] );
+		for (const_iterator it = begin(); it != end(); it++)
+			if ((*it)->GetLocalPort() == iPort)
+				return *it;
 
 		return( NULL );
 	}
@@ -1513,9 +1498,9 @@ public:
 	//! returns a pointer to the FIRST sock found by name or NULL on no match
 	virtual T * FindSockByName( const CS_STRING & sName )
 	{
-		typename std::vector<T *>::iterator it;
-		typename std::vector<T *>::iterator it_end = this->end();
-		for( it = this->begin(); it != it_end; it++ )
+		typename std::set<T *>::iterator it;
+		typename std::set<T *>::iterator it_end = m_sSocks.end();
+		for( it = m_sSocks.begin(); it != it_end; it++ )
 			if ( (*it)->GetSockName() == sName )
 				return( *it );
 
@@ -1525,9 +1510,9 @@ public:
 	//! returns a pointer to the FIRST sock found by filedescriptor or NULL on no match
 	virtual T * FindSockByFD( int iFD )
 	{
-		for( unsigned int i = 0; i < this->size(); i++ )
-			if ( ( (*this)[i]->GetRSock() == iFD ) || ( (*this)[i]->GetWSock() == iFD ) )
-				return( (*this)[i] );
+		for (const_iterator it = begin(); it != end(); it++)
+			if ((*it)->GetRSock() == iFD || (*it)->GetWSock() == iFD)
+				return *it;
 
 		return( NULL );
 	}
@@ -1536,21 +1521,21 @@ public:
 	{
 		std::set<T *> vpSocks;
 
-		for( unsigned int i = 0; i < this->size(); i++ )
-			if ( (*this)[i]->GetSockName() == sName )
-				vpSocks.insert( (*this)[i] );
+		for (const_iterator it = begin(); it != end(); it++)
+			if ((*it)->GetSockName() == sName)
+				vpSocks.insert(*it);
 
 		return( vpSocks );
 	}
 
-	//! returns a vector of pointers to socks with sHostname as being connected
+	//! returns a set of pointers to socks with sHostname as being connected
 	virtual std::set<T *> FindSocksByRemoteHost( const CS_STRING & sHostname )
 	{
 		std::set<T *> vpSocks;
 
-		for( unsigned int i = 0; i < this->size(); i++ )
-			if ( (*this)[i]->GetHostName() == sHostname )
-				vpSocks.insert( (*this)[i] );
+		for (const_iterator it = begin(); it != end(); it++)
+			if ((*it)->GetHostName() == sHostname)
+				vpSocks.insert(*it);
 
 		return( vpSocks );
 	}
@@ -1558,7 +1543,7 @@ public:
 	//! add a cronjob at the manager level
 	virtual void AddCron(CCron *pcCron)
 	{
-		m_vcCrons.insert(pcCron);
+		m_sCrons.insert(pcCron);
 	}
 
 	/**
@@ -1569,9 +1554,9 @@ public:
 	 */
 	virtual void DelCron( const CS_STRING & sName, bool bDeleteAll = true, bool bCaseSensitive = true )
 	{
-		std::set<CCron *>::iterator it = m_vcCrons.begin();
+		std::set<CCron *>::iterator it = m_sCrons.begin();
 
-		while (it != m_vcCrons.end())
+		while (it != m_sCrons.end())
 		{
 			int (*Cmp)(const char *, const char *) = ( bCaseSensitive ? strcmp : strcasecmp );
 			CCron *pcCron = *it;
@@ -1579,7 +1564,7 @@ public:
 			if (Cmp(pcCron->GetName().c_str(), sName.c_str()) == 0)
 			{
 				pcCron->Stop();
-				m_vcCrons.erase(it++);
+				m_sCrons.erase(it++);
 				CS_Delete(pcCron);
 				// iterators pointing to other elements than the
 				// one being removed stay valid!
@@ -1591,62 +1576,29 @@ public:
 		}
 	}
 
-#warning
-#if 0
-	//! delete cron by idx
-	virtual void DelCron( u_int iPos )
-	{
-		if ( iPos < m_vcCrons.size() )
-		{
-			m_vcCrons[iPos]->Stop();
-			CS_Delete( m_vcCrons[iPos] );
-			m_vcCrons.erase( m_vcCrons.begin() + iPos );
-		}
-	}
-#endif
-
 	//! delete cron by address
 	virtual void DelCronByAddr( CCron *pcCron )
 	{
 		// First check if it's really in there, just because we can
-		if (m_vcCrons.find(pcCron) == m_vcCrons.end())
+		if (m_sCrons.find(pcCron) == m_sCrons.end())
 			return;
 
-		m_vcCrons.erase(pcCron);
+		m_sCrons.erase(pcCron);
 		CS_Delete(pcCron);
 	}
 
-	std::set<CCron *> & GetCrons() { return( m_vcCrons ); }
+	std::set<CCron *> & GetCrons() { return( m_sCrons ); }
 
 	//! Delete a sock by addr
-	//! its position is looked up
 	//! the socket is deleted, the appropriate call backs are peformed
 	//! and its instance is removed from the manager
-	virtual void DelSockByAddr( T *pcSock )
+	virtual void DelSockByAddr( T *pSock )
 	{
-		for( u_int a = 0; a < this->size(); a++ )
+		if (m_sSocks.find(pSock) == m_sSocks.end())
 		{
-			if ( pcSock == (*this)[a] )
-			{
-				DelSock( a );
-				return;
-			}
-		}
-	}
-	//! Delete a sock by position in the vector
-	//! the socket is deleted, the appropriate call backs are peformed
-	//! and its instance is removed from the manager
-	//! deleting in a loop can be tricky, be sure you watch your position.
-	//! ie for( u_int a = 0; a < size(); a++ ) DelSock( a-- );
-	virtual void DelSock( u_int iPos )
-	{
-		if ( iPos >= this->size() )
-		{
-			CS_DEBUG( "Invalid Sock Position Requested! [" << iPos << "]" );
+			CS_DEBUG( "Invalid Sock removed! [" << pSock << "]" );
 			return;
 		}
-
-		T * pSock = (*this)[iPos];
 
 		if( pSock->GetCloseType() != T::CLT_DEREFERENCE )
 		{
@@ -1660,34 +1612,13 @@ public:
 		T * pTmpSock = pSock;
 
 		CS_Delete( pSock );
-		this->erase( this->begin() + iPos );
 
 		// Do this after the socket was deleted, the destructor could
 		// register the socket again (pTmpSock because CS_Delete eats babies)
 		RemoveAttention(pTmpSock);
+		m_sSocks.erase(pTmpSock);
 	}
 
-	/**
-	 * @brief swaps out a sock with a copy of the original sock
-	 * @param pNewSock the new sock to change out with. (this should be constructed by you with the default ctor)
-	 * @param iOrginalSockIdx the position in this sockmanager of the original sock
-	 * @return true on success
-	 */
-	virtual bool SwapSockByIdx( Csock *pNewSock, u_long iOrginalSockIdx )
-	{
-		if( iOrginalSockIdx >= this->size() )
-		{
-			CS_DEBUG( "Invalid Sock Position Requested! [" << iOrginalSockIdx << "]" );
-			return( false );
-		}
-
-		Csock *pSock = (*this)[iOrginalSockIdx];
-		pNewSock->Copy( *pSock );
-		pSock->Dereference();
-		(*this)[iOrginalSockIdx] = (T *)pNewSock;
-		this->push_back( (T *)pSock ); // this allows it to get cleaned up
-		return( true );
-	}
 
 	/**
 	 * @brief swaps out a sock with a copy of the original sock
@@ -1695,14 +1626,22 @@ public:
 	 * @param pOrigSock the address of the original socket
 	 * @return true on success
 	 */
-	virtual bool SwapSockByAddr( Csock *pNewSock, Csock *pOrigSock )
+	virtual bool SwapSockByAddr( T *pNewSock, T *pOrigSock )
 	{
-		for( u_long a = 0; a < this->size(); a++ )
+		if (m_sSocks.find(pOrigSock) == m_sSocks.end())
 		{
-			if( (*this)[a] == pOrigSock )
-				return( SwapSockByIdx( pNewSock, a ) );
+			CS_DEBUG( "Invalid Sock Requested! [" << pOrigSock << "]" );
+			return false;
 		}
-		return( false );
+
+		pNewSock->Copy( *pOrigSock );
+		pOrigSock->Dereference();
+
+		m_sSocks.insert(pNewSock);
+		// Both sockets are now in our socket set, the old one will be
+		// cleaned up because of CLT_DEREFERENCE.
+
+		return true;
 	}
 
 	//! Get the bytes read from all sockets current and past
@@ -1712,8 +1651,8 @@ public:
 		unsigned long long iRet = m_iBytesRead;
 
 		// Add in the outstanding bytes read from active sockets
-		for( u_int a = 0; a < this->size(); a++ )
-			iRet += (*this)[a]->GetBytesRead();
+		for (const_iterator it = begin(); it != end(); it++)
+			iRet += (*it)->GetBytesRead();
 
 		return( iRet );
 	}
@@ -1725,8 +1664,8 @@ public:
 		unsigned long long iRet = m_iBytesWritten;
 
 		// Add in the outstanding bytes written to active sockets
-		for( u_int a = 0; a < this->size(); a++ )
-			iRet += (*this)[a]->GetBytesWritten();
+		for (const_iterator it = begin(); it != end(); it++)
+			iRet += (*it)->GetBytesWritten();
 
 		return( iRet );
 	}
@@ -1739,16 +1678,16 @@ public:
 	//! these crons get ran and checked in Loop()
 	virtual void Cron()
 	{
-		std::set<CCron *>::iterator it = m_vcCrons.begin();
+		std::set<CCron *>::iterator it = m_sCrons.begin();
 
-		while (it != m_vcCrons.end())
+		while (it != m_sCrons.end())
 		{
 			CCron *pcCron = *it;
 
 			if (!pcCron->isValid())
 			{
 				CS_Delete(pcCron);
-				m_vcCrons.erase(it++);
+				m_sCrons.erase(it++);
 				// std::set::erase() only invalidates iterators
 				// to the element being removed!
 			} else
@@ -1757,13 +1696,19 @@ public:
 	}
 
 	////////
-	// Connection State Functions
+	// Iterators
+
+	typedef typename std::set<T *>::const_iterator const_iterator;
+	const_iterator begin() const { return m_sSocks.begin(); }
+	const_iterator end() const { return m_sSocks.end(); }
+	size_t size() const { return m_sSocks.size(); }
 
 	///////////
 	// members
-#warning todo use sets instead of vector (also for inheriting!)
-	std::set<CCron *>		m_vcCrons;
-	std::vector<T *>		m_vNeedAttentionSocks;
+private:
+	std::set<T *>			m_sSocks;
+	std::set<CCron *>		m_sCrons;
+	std::set<T *>			m_sNeedAttentionSocks;
 	unsigned long long		m_iBytesRead;
 	unsigned long long		m_iBytesWritten;
 	ev_tstamp			m_tCallTimeouts;

@@ -459,11 +459,12 @@ void CClient::ReadLine(const CString& sData) {
 					if (!sTarget.Equals(sStatusPrefix, false, sStatusPrefix.length())) {
 						// Need to lookup the connection by port, filter the port, and forward to the user
 						CSockManager& Manager = CZNC::Get().GetManager();
+						CSockManager::const_iterator it;
 
-						for (unsigned int a = 0; a < Manager.size(); a++) {
-							CDCCBounce* pSock = (CDCCBounce*) Manager[a];
-
-							if (pSock && pSock->GetSockName().Equals("DCC::", false, 5)) {
+						for (it = Manager.begin(); it != Manager.end(); it++) {
+							CZNCSock *pcSock = *it;
+							if (pcSock && pcSock->GetSockName().Equals("DCC::", false, 5)) {
+								CDCCBounce* pSock = (CDCCBounce*) pcSock;
 								if (pSock->GetUserPort() == sCTCP.Token(3).ToUShort()) {
 									PutIRC("PRIVMSG " + sTarget + " :\001DCC " + sType + " " + sFile + " " + CString(pSock->GetLocalPort()) + " " + sCTCP.Token(4) + "\001");
 								}

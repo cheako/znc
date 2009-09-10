@@ -1071,13 +1071,19 @@ void CModPerl::LoadPerlMod(const CString & sModule)
 
 void CModPerl::DestroyAllSocks(const CString & sModuleName)
 {
-	for (u_int a = 0; a < m_pManager->size(); a++)
+	CSockManager::const_iterator it = m_pManager->begin();
+
+	while (it != m_pManager->end())
 	{
-		if ((*m_pManager)[a]->GetSockName() == ZNCSOCK)
+		if ((*it)->GetSockName() == ZNCSOCK)
 		{
-			if ((sModuleName.empty()) || (sModuleName == ((CPerlSock *)(*m_pManager)[a])->GetModuleName()))
-				m_pManager->DelSock(a--);
+			if ((sModuleName.empty()) || (sModuleName == ((CPerlSock *)*it)->GetModuleName()))
+			{
+				m_pManager->DelSockByAddr(*it++);
+				continue;
+			}
 		}
+		it++;
 	}
 }
 void CModPerl::UnloadPerlMod(const CString & sModule)

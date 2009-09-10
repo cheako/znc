@@ -995,10 +995,13 @@ bool CUser::PutModule(const CString& sModule, const CString& sLine, CClient* pCl
 
 bool CUser::ResumeFile(unsigned short uPort, unsigned long uFileSize) {
 	CSockManager& Manager = CZNC::Get().GetManager();
+	CSockManager::const_iterator it;
 
-	for (unsigned int a = 0; a < Manager.size(); a++) {
-		if (Manager[a]->GetSockName().Equals("DCC::LISTEN::", false, 13)) {
-			CDCCSock* pSock = (CDCCSock*) Manager[a];
+	for (it = Manager.begin(); it != Manager.end(); it++) {
+		CZNCSock *pcSock = *it;
+
+		if (pcSock->GetSockName().Equals("DCC::LISTEN::", false, 13)) {
+			CDCCSock *pSock = (CDCCSock *)pcSock;
 
 			if (pSock->GetLocalPort() == uPort) {
 				if (pSock->Seek(uFileSize)) {

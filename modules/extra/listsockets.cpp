@@ -97,9 +97,10 @@ public:
 
 		std::priority_queue<CSocketSorter> socks;
 
-		for (unsigned int a = 0; a < m.size(); a++) {
-			socks.push(m[a]);
-		}
+		CSockManager::const_iterator it;
+
+		for (it = m.begin(); it != m.end(); it++)
+			socks.push(*it);
 
 		CTable Table;
 		Table.AddColumn("Name");

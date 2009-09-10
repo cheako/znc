@@ -425,6 +425,7 @@ void CClient::UserCommand(CString& sLine) {
 		m_pUser->SendFile(GetNick(), sFile);
 	} else if (sCommand.Equals("LISTDCCS")) {
 		CSockManager& Manager = CZNC::Get().GetManager();
+		CSockManager::const_iterator it;
 
 		CTable Table;
 		Table.AddColumn("Type");
@@ -434,8 +435,8 @@ void CClient::UserCommand(CString& sLine) {
 		Table.AddColumn("IP");
 		Table.AddColumn("File");
 
-		for (unsigned int a = 0; a < Manager.size(); a++) {
-			CString sSockName = Manager[a]->GetSockName();
+		for (it = Manager.begin(); it != Manager.end(); it++) {
+			CString sSockName = (*it)->GetSockName();
 
 			if (sSockName.TrimPrefix("DCC::")) {
 				if (sSockName.Equals("XFER::REMOTE::", false, 14)) {
@@ -447,7 +448,7 @@ void CClient::UserCommand(CString& sLine) {
 				}
 
 				if (sSockName.Equals("SEND", false, 4)) {
-					CDCCSock* pSock = (CDCCSock*) Manager[a];
+					CDCCSock* pSock = (CDCCSock*) *it;
 
 					Table.AddRow();
 					Table.SetCell("Type", "Sending");
@@ -457,7 +458,7 @@ void CClient::UserCommand(CString& sLine) {
 					Table.SetCell("IP", pSock->GetRemoteIP());
 					Table.SetCell("File", pSock->GetFileName());
 				} else if (sSockName.Equals("GET", false, 3)) {
-					CDCCSock* pSock = (CDCCSock*) Manager[a];
+					CDCCSock* pSock = (CDCCSock*) *it;
 
 					Table.AddRow();
 					Table.SetCell("Type", "Getting");
@@ -467,7 +468,7 @@ void CClient::UserCommand(CString& sLine) {
 					Table.SetCell("IP", pSock->GetRemoteIP());
 					Table.SetCell("File", pSock->GetFileName());
 				} else if (sSockName.Equals("LISTEN", false, 6)) {
-					CDCCSock* pSock = (CDCCSock*) Manager[a];
+					CDCCSock* pSock = (CDCCSock*) *it;
 
 					Table.AddRow();
 					Table.SetCell("Type", "Sending");
@@ -476,7 +477,7 @@ void CClient::UserCommand(CString& sLine) {
 					Table.SetCell("IP", pSock->GetRemoteIP());
 					Table.SetCell("File", pSock->GetFileName());
 				} else if (sSockName.Equals("XFER::LOCAL", false, 11)) {
-					CDCCBounce* pSock = (CDCCBounce*) Manager[a];
+					CDCCBounce* pSock = (CDCCBounce*) *it;
 
 					CString sState = "Waiting";
 					if ((pSock->IsConnected()) || (pSock->IsPeerConnected())) {
@@ -493,7 +494,7 @@ void CClient::UserCommand(CString& sLine) {
 					Table.SetCell("IP", pSock->GetRemoteIP());
 					Table.SetCell("File", pSock->GetFileName());
 				} else if (sSockName.Equals("CHAT::LOCAL", false, 11)) {
-					CDCCBounce* pSock = (CDCCBounce*) Manager[a];
+					CDCCBounce* pSock = (CDCCBounce*) *it;
 
 					CString sState = "Waiting";
 					if ((pSock->IsConnected()) || (pSock->IsPeerConnected())) {
