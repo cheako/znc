@@ -1475,17 +1475,13 @@ public:
 
 	virtual void RemoveAttention(Csock *pcSock)
 	{
-		typename std::vector<T *>::iterator it = m_vNeedAttentionSocks.begin();
-
-		for (; it != m_vNeedAttentionSocks.end(); it++) {
-			if (*it != pcSock)
-				continue;
+		typename std::vector<T *>::iterator it =
+			std::find(m_vNeedAttentionSocks.begin(),
+					m_vNeedAttentionSocks.end(), pcSock);
 
 #warning this assumes the socket is only once in the vector :(... better use a set?
+		if (it != m_vNeedAttentionSocks.end())
 			m_vNeedAttentionSocks.erase(it);
-
-			break;
-		}
 	}
 
 	//! returns a pointer to the FIRST sock found by port or NULL on no match
