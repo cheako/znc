@@ -1163,8 +1163,6 @@ bool Csock::Write( const char *data, int len )
 
 			m_iBytesWritten += (unsigned long long)iErr;
 		}
-
-		return( true );
 	}
 	else
 #endif /* HAVE_LIBSSL */
