@@ -104,6 +104,7 @@ public:
 private:
 #ifdef HAVE_ARES
 	static void SocketReadyCallback(EV_P_ ev_io *sock, int revents);
+	static void AresSocketCallback(void *data, int fd, int readable, int writeable);
 
 	static void AresTimeoutCheck(EV_P_ ev_check *, int);
 	static void AresTimeoutPrepare(EV_P_ ev_prepare *, int);
@@ -111,6 +112,8 @@ private:
 	ev_check	m_ares_check;
 	ev_prepare	m_ares_prep;
 	ev_timer	m_ares_timer;
+
+	map<int, ev_io *> m_ares_watchers;
 #endif
 };
 

@@ -62,8 +62,6 @@ void CSockManager::AresTimeoutPrepare(EV_P_ ev_prepare *prep, int)
 	ev_timer_set(&p->m_ares_timer, tv.tv_sec + 1, 0);
 	ev_timer_start(EV_DEFAULT_UC_ &p->m_ares_timer);
 }
-
-static void AresSocketCallback(void *data, ares_socket_t fd, int readable, int writeable);
 #endif
 
 CZNCSock::~CZNCSock() {
@@ -108,7 +106,17 @@ CSockManager::CSockManager() : TSocketManager<CZNCSock>() {
 
 CSockManager::~CSockManager() {
 #ifdef HAVE_ARES
+	// This should already free all watchers...
 	ares_destroy(GetAres());
+
+	// ...but let's be sure
+	while (!m_ares_watchers.empty()) {
+		ev_io *io = m_ares_watchers.begin()->second;
+		ev_io_stop(EV_DEFAULT_UC_ io);
+		delete io;
+		m_ares_watchers.erase(m_ares_watchers.begin());
+	}
+
 	ev_check_stop(EV_DEFAULT_UC_ &m_ares_check);
 	ev_prepare_stop(EV_DEFAULT_UC_ &m_ares_prep);
 	ev_timer_stop(EV_DEFAULT_UC_ &m_ares_timer);
@@ -249,7 +257,7 @@ unsigned int CSockManager::GetAnonConnectionCount(const CString &sIP) const {
 }
 
 #ifdef HAVE_ARES
-static void SocketReadyCallback(EV_P_ ev_io *sock, int revents)
+void CSockManager::SocketReadyCallback(EV_P_ ev_io *sock, int revents)
 {
 	ares_socket_t read_fd = ARES_SOCKET_BAD;
 	ares_socket_t write_fd = ARES_SOCKET_BAD;
@@ -263,31 +271,30 @@ static void SocketReadyCallback(EV_P_ ev_io *sock, int revents)
 	ares_process_fd(GetAres(), read_fd, write_fd);
 }
 
-static void AresSocketCallback(void *data, ares_socket_t fd, int readable, int writeable)
+void CSockManager::AresSocketCallback(void *data, ares_socket_t fd, int readable, int writeable)
 {
-#warning this is ugly and causes leaks, ideas?
-	static map<ares_socket_t, ev_io *> watchers;
-	map<ares_socket_t, ev_io *>::iterator it = watchers.find(fd);
+	CSockManager *p = (CSockManager *) data;
+	map<ares_socket_t, ev_io *>::iterator it = p->m_ares_watchers.find(fd);
 
 	if (!readable && !writeable)
 	{
 		// Remove that watcher
-		if (it != watchers.end())
+		if (it != p->m_ares_watchers.end())
 		{
 			ev_io_stop(EV_DEFAULT_UC_ it->second);
 			delete it->second;
-			watchers.erase(it);
+			p->m_ares_watchers.erase(it);
 		}
 		return;
 	}
 
 	// c-ares either adds a new fd or changes an existing fd's settings
 	ev_io *io;
-	if (it != watchers.end())
+	if (it != p->m_ares_watchers.end())
 		io = it->second;
 	else {
 		io = new ev_io;
-		watchers[fd] = io;
+		p->m_ares_watchers[fd] = io;
 		ev_io_init(io, SocketReadyCallback, fd, 0);
 	}
 
