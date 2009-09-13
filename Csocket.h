@@ -841,7 +841,7 @@ public:
 
 
 	//! return how long it has been (in seconds) since the last read or successful write
-	int GetTimeSinceLastDataTransaction( time_t iNow = 0 )
+	ev_tstamp GetTimeSinceLastDataTransaction()
 	{
 		ev_tstamp time_left = ev_timer_remaining(EV_DEFAULT_UC_ &m_io_timeout);
 
