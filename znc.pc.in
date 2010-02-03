@@ -13,6 +13,8 @@ version=@PACKAGE_VERSION@
 moddir=@MODDIR@
 moddatadir=@DATADIR@
 modlink=@MODLINK@
+libznc=@LIBZNC@
+libzncdir=@LIBZNCDIR@
 
 INC_PATH=-I${includedir}/znc
 

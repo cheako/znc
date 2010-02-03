@@ -13,6 +13,8 @@ version=@PACKAGE_VERSION@
 moddir=@MODDIR@
 moddatadir=@DATADIR@
 modlink=@MODLINK@
+libznc=@LIBZNC@
+libzncdir=@LIBZNCDIR@
 
 # This and the following two lines should be the only differences to znc.pc.in
 srcdir=@abs_srcdir@
