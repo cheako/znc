@@ -1094,11 +1094,18 @@ bool Csock::AcceptSSL()
 bool Csock::AcceptSSL( const char *data, size_t len )
 {
 #ifdef HAVE_LIBSSL
+	// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+	// Buffer partial reads (but only if they look like they could be
+	// ClientHellos)
+
 	// Check if the buffer contains an SSL ClientHello
-	if (len < 9)
+	if (len < 4)
 		return( false );
 	if ((unsigned int) data[0] == 0x16) {
 		// Content type: handshake, this is the SSLv3/TLS record layer
+
+		if (len < 10)
+			return( false );
 
 		// protocol major version, SSLv1-v3, TLS is major 3 minor 1
 		if ((unsigned int) data[1] > 3)
