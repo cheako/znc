@@ -1095,7 +1095,7 @@ bool Csock::AcceptSSL( const char *data, size_t len )
 {
 #ifdef HAVE_LIBSSL
 	// Check if the buffer contains an SSL ClientHello
-	if (len < 6)
+	if (len < 9)
 		return( false );
 	if ((unsigned int) data[0] == 0x16) {
 		// Content type: handshake, this is the SSLv3/TLS record layer
