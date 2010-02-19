@@ -1097,25 +1097,25 @@ bool Csock::AcceptSSL( const char *data, size_t len )
 	// Check if the buffer contains an SSL ClientHello
 	if (len < 6)
 		return false;
-	if ((int) data[0] == 0x16) {
+	if ((unsigned int) data[0] == 0x16) {
 		// Content type: handshake, this is the SSLv3/TLS record layer
 
 		// protocol major version, SSLv1-v3, TLS is major 3 minor 1
-		if ((int) data[1] > 3)
+		if ((unsigned int) data[1] > 3)
 			return false;
 		// Type: client hello
-		if ((int) data[5] != 0x01)
+		if ((unsigned int) data[5] != 0x01)
 			return false;
 		// yet another version number, SSLv1-v3, TLS is major 3 minor 1
-		if ((int) data[9] > 3)
+		if ((unsigned int) data[9] > 3)
 			return false;
 	} else {
 		// This is SSLv2, no idea how SSLv1 looks, but its broken anyway
 		// Type: client hello
-		if ((int) data[2] != 0x01)
+		if ((unsigned int) data[2] != 0x01)
 			return false;
 		// protocol major version, SSLv1-v3, TLS is major 3 minor 1
-		if ((int) data[3] > 3)
+		if ((unsigned int) data[3] > 3)
 			return false;
 	}
 
