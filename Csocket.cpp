@@ -1096,34 +1096,34 @@ bool Csock::AcceptSSL( const char *data, size_t len )
 #ifdef HAVE_LIBSSL
 	// Check if the buffer contains an SSL ClientHello
 	if (len < 6)
-		return false;
+		return( false );
 	if ((unsigned int) data[0] == 0x16) {
 		// Content type: handshake, this is the SSLv3/TLS record layer
 
 		// protocol major version, SSLv1-v3, TLS is major 3 minor 1
 		if ((unsigned int) data[1] > 3)
-			return false;
+			return( false );
 		// Type: client hello
 		if ((unsigned int) data[5] != 0x01)
-			return false;
+			return( false );
 		// yet another version number, SSLv1-v3, TLS is major 3 minor 1
 		if ((unsigned int) data[9] > 3)
-			return false;
+			return( false );
 	} else {
 		// This is SSLv2, no idea how SSLv1 looks, but its broken anyway
 		// Type: client hello
 		if ((unsigned int) data[2] != 0x01)
-			return false;
+			return( false );
 		// protocol major version, SSLv1-v3, TLS is major 3 minor 1
 		if ((unsigned int) data[3] > 3)
-			return false;
+			return( false );
 	}
 
 	CS_DEBUG("AcceptSSL(): Detected ClientHello, switching to SSL");
 
 	if (!m_ssl && !SSLServerSetup()) {
 		CS_DEBUG("SSL setup failed :(");
-		return false;
+		return( false );
 	}
 
 	// We have to give the data we already read to openssl. We create a new
@@ -1149,7 +1149,7 @@ bool Csock::AcceptSSL( const char *data, size_t len )
 	m_ssl->rbio = orig;
 	BIO_free_all(mem);
 
-	return true;
+	return( true );
 #else  /* HAVE_LIBSSL */
 	return( false );
 #endif /* !HAVE_LIBSSL */
