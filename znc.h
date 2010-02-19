@@ -255,8 +255,9 @@ public:
 #ifdef HAVE_LIBSSL
 		if (IsSSL()) {
 			bSSL = true;
-			m_pListener->SetPemLocation(CZNC::Get().GetPemLocation());
 		}
+		m_pListener->SetPemLocation(CZNC::Get().GetPemLocation());
+		m_pListener->SetAutoNegotiateSSL(true);
 #endif
 
 		return CZNC::Get().GetManager().ListenHost(m_uPort, "_LISTENER", m_sBindHost, bSSL, SOMAXCONN,

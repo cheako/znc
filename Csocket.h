@@ -737,6 +737,11 @@ public:
 	static int PemPassCB( char *buf, int size, int rwflag, void *pcSocket );
 	static int CertVerifyCB( int preverify_ok, X509_STORE_CTX *x509_ctx );
 
+	//! Automatically switch to SSL if a SSL handshake is received.
+	//  Only works for servers where the client sends data first.
+	void SetAutoNegotiateSSL( bool b ) { m_bAutoNegotiateSSL = b; }
+	bool GetAutoNegotiateSSL() const { return m_bAutoNegotiateSSL; }
+
 	//! Set the SSL method type
 	void SetSSLMethod( int iMethod );
 	int GetSSLMethod();
@@ -1026,6 +1031,7 @@ private:
 	SSL 				*m_ssl;
 	SSL_CTX				*m_ssl_ctx;
 	unsigned int		m_iRequireClientCertFlags;
+	bool				m_bAutoNegotiateSSL;
 
 	FPCertVerifyCB		m_pCerVerifyCB;
 
@@ -1546,8 +1552,15 @@ public:
 								if ( T::TMO_READ & pcSock->GetTimeoutType() )
 									pcSock->ResetTimer();	// reset the timeout timer
 
-								pcSock->ReadData( cBuff(), bytes );	// Call ReadData() before PushBuff() so that it is called before the ReadLine() event - LD  07/18/05
-								pcSock->PushBuff( cBuff(), bytes );
+								// If the very first data received is an SSL handshake,
+								// we enable SSL for this connection.
+								if ( !pcSock->GetAutoNegotiateSSL() || !pcSock->AcceptSSL( cBuff(), bytes ) )
+								{
+									pcSock->SetAutoNegotiateSSL( false );
+									// Call ReadData() before PushBuff() so that it is called before the ReadLine() event - LD  07/18/05
+									pcSock->ReadData( cBuff(), bytes );
+									pcSock->PushBuff( cBuff(), bytes );
+								}
 								break;
 							}
 						}
@@ -2122,14 +2135,15 @@ private:
 
 						bool bAddSock = true;
 #ifdef HAVE_LIBSSL
-						//
+						NewpcSock->SetCipher( pcSock->GetCipher() );
+						NewpcSock->SetPemLocation( pcSock->GetPemLocation() );
+						NewpcSock->SetPemPass( pcSock->GetPemPass() );
+						NewpcSock->SetRequireClientCertFlags( pcSock->GetRequireClientCertFlags() );
+						NewpcSock->SetAutoNegotiateSSL( pcSock->GetAutoNegotiateSSL() );
+
 						// is this ssl ?
 						if ( pcSock->GetSSL() )
 						{
-							NewpcSock->SetCipher( pcSock->GetCipher() );
-							NewpcSock->SetPemLocation( pcSock->GetPemLocation() );
-							NewpcSock->SetPemPass( pcSock->GetPemPass() );
-							NewpcSock->SetRequireClientCertFlags( pcSock->GetRequireClientCertFlags() );
 							bAddSock = NewpcSock->AcceptSSL();
 						}
 

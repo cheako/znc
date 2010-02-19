@@ -710,6 +710,7 @@ void Csock::Copy( const Csock & cCopy )
 
 #ifdef HAVE_LIBSSL
 	m_iRequireClientCertFlags = cCopy.m_iRequireClientCertFlags;
+	m_bAutoNegotiateSSL = cCopy.m_bAutoNegotiateSSL;
 	m_sSSLBuffer	= cCopy.m_sSSLBuffer;
 
 	FREE_SSL();
@@ -2421,6 +2422,7 @@ void Csock::Init( const CS_STRING & sHostname, u_short uPort, int itimeout )
 	m_ssl = NULL;
 	m_ssl_ctx = NULL;
 	m_iRequireClientCertFlags = 0;
+	m_bAutoNegotiateSSL = false;
 #endif /* HAVE_LIBSSL */
 	m_iTcount = 0;
 	m_iReadSock = CS_INVALID_SOCK;
