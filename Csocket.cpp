@@ -1093,8 +1093,6 @@ bool Csock::AcceptSSL()
 
 bool Csock::AcceptSSL( const char *data, size_t len )
 {
-	// TODO SetPemLocation() must be called before this
-
 #ifdef HAVE_LIBSSL
 	// Check if the buffer contains an SSL ClientHello
 	if (len < 6)
@@ -1112,7 +1110,7 @@ bool Csock::AcceptSSL( const char *data, size_t len )
 	CS_DEBUG("AcceptSSL(): Detected ClientHello, switching to SSL");
 
 	if (!m_ssl && !SSLServerSetup()) {
-		DEBUG("Meh, SSL setup failed :(");
+		CS_DEBUG("SSL setup failed :(");
 		return false;
 	}
 
@@ -1126,12 +1124,15 @@ bool Csock::AcceptSSL( const char *data, size_t len )
 
 	m_ssl->rbio = mem;
 
+	// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+	// Remove the CS_DEBUG() below, how can we make sure post-pending: 0?
+
 	// Let's hope this reads all of the data we have queued up, no idea if
 	// it works.
-	DEBUG("Pre-pending: " << ((BUF_MEM *) mem->ptr)->length);
+	CS_DEBUG("Pre-pending: " << ((BUF_MEM *) mem->ptr)->length);
 	AcceptSSL();
 	// This *MUST* be 0, else some data was lost
-	DEBUG("Post-pending: " << ((BUF_MEM *) mem->ptr)->length);
+	CS_DEBUG("Post-pending: " << ((BUF_MEM *) mem->ptr)->length);
 
 	m_ssl->rbio = orig;
 	BIO_free_all(mem);
