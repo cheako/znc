@@ -57,6 +57,17 @@ CClient::~CClient() {
 	}
 }
 
+void CClient::ReadData(const char *data, size_t len) {
+	SetPemLocation(CZNC::Get().GetPemLocation());
+	if (AcceptSSL(data, len)) {
+		DEBUG("Found a SSL handshake, switched to SSL");
+	} else {
+		DEBUG("Nope, no SSL :(");
+	}
+
+	// TODO How can we avoid PushBuff() being called on the buffer we just handled?
+}
+
 void CClient::ReadLine(const CString& sData) {
 	CString sLine = sData;
 

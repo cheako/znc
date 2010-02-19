@@ -116,6 +116,7 @@ public:
 	void PutModNotice(const CString& sModule, const CString& sLine);
 
 	virtual void ReadLine(const CString& sData);
+	virtual void ReadData(const char *sData, size_t len);
 	bool SendMotd();
 	void HelpUser();
 	void AuthUser();

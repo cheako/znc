@@ -547,6 +547,9 @@ public:
 	//! Accept an inbound SSL connection, this is used internally and called after Accept
 	virtual bool AcceptSSL();
 
+	//! Accept an inbound SSL connection with already read data
+	virtual bool AcceptSSL( const char *data, size_t len );
+
 	//! This sets up the SSL Client, this is used internally
 	virtual bool SSLClientSetup();
 

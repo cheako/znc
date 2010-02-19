@@ -1090,6 +1090,57 @@ bool Csock::AcceptSSL()
 	return( false );
 }
 
+bool Csock::AcceptSSL( const char *data, size_t len )
+{
+	// TODO SetPemLocation() must be called before this
+
+#ifdef HAVE_LIBSSL
+	// Check if the buffer contains an SSL ClientHello
+	if (len < 6)
+		return false;
+	// Content type: handshake
+	if ((int) data[0] != 0x16)
+		return false;
+	// protocol major version, SSLv1-v3, TLS is major 3 minor 1
+	if ((int) data[1] > 3)
+		return false;
+	// Type: client hello
+	if ((int) data[5] != 0x01)
+		return false;
+
+	CS_DEBUG("AcceptSSL(): Detected ClientHello, switching to SSL");
+
+	if (!m_ssl && !SSLServerSetup()) {
+		DEBUG("Meh, SSL setup failed :(");
+		return false;
+	}
+
+	// We have to give the data we already read to openssl. We create a new
+	// BIO, tell openssl to read from it (SSL_accept() will do the actual
+	// reading) and then switch back to the original, fd-based BIO.
+	// We can't use SSL_set_bio() because it closes the "old" BIO.
+	// 'data' won't be written to, so casting away const is safe.
+	BIO *mem = BIO_new_mem_buf((char *) data, len);
+	BIO *orig = SSL_get_rbio(m_ssl);
+
+	m_ssl->rbio = mem;
+
+	// Let's hope this reads all of the data we have queued up, no idea if
+	// it works.
+	DEBUG("Pre-pending: " << ((BUF_MEM *) mem->ptr)->length);
+	AcceptSSL();
+	// This *MUST* be 0, else some data was lost
+	DEBUG("Post-pending: " << ((BUF_MEM *) mem->ptr)->length);
+
+	m_ssl->rbio = orig;
+	BIO_free_all(mem);
+
+	return true;
+#else  /* HAVE_LIBSSL */
+	return( false );
+#endif /* !HAVE_LIBSSL */
+}
+
 bool Csock::SSLClientSetup()
 {
 #ifdef HAVE_LIBSSL
