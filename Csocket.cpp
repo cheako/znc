@@ -1152,10 +1152,10 @@ bool Csock::AcceptSSL( const char *data, size_t len )
 
 	// Let's hope this reads all of the data we have queued up, no idea if
 	// it works.
-	CS_DEBUG("Pre-pending: " << ((BUF_MEM *) mem->ptr)->length);
+	CS_DEBUG("Pre-pending: " << BIO_pending(mem));
 	AcceptSSL();
 	// This *MUST* be 0, else some data was lost
-	CS_DEBUG("Post-pending: " << ((BUF_MEM *) mem->ptr)->length);
+	CS_DEBUG("Post-pending: " << BIO_pending(mem));
 
 	m_ssl->rbio = orig;
 	BIO_free_all(mem);
