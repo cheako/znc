@@ -1098,6 +1098,10 @@ bool Csock::AcceptSSL( const char *data, size_t len )
 	// Buffer partial reads (but only if they look like they could be
 	// ClientHellos)
 
+	// SSL over SSL is a bad idea
+	if (GetSSL())
+		return( false );
+
 	// Check if the buffer contains an SSL ClientHello
 	if (len < 4)
 		return( false );
