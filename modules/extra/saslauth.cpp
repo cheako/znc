@@ -87,7 +87,7 @@ public:
 	}
 
 private:
-	TCacheMap<CString>	m_Cache;
+	TCacheSet<CString>	m_Cache;
 
 	static sasl_callback_t	cbs[];
 	static CString		method;

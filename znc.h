@@ -13,6 +13,7 @@
 #include "FileUtils.h"
 #include "Modules.h"
 #include "Socket.h"
+#include "Containers.h"
 #include <map>
 
 using std::map;
@@ -170,7 +171,7 @@ protected:
 	unsigned long long		m_uBytesRead;
 	unsigned long long		m_uBytesWritten;
 	CConnectUserTimer		*m_pConnectUserTimer;
-	TCacheMap<CString>		m_sConnectThrottle;
+	TCacheSet<CString>		m_sConnectThrottle;
 };
 
 class CRealListener : public CZNCSock {

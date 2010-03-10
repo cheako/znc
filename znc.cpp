@@ -139,7 +139,7 @@ bool CZNC::ConnectUser(CUser *pUser) {
 	if (!pServer)
 		return false;
 
-	if (m_sConnectThrottle.GetItem(pServer->GetName()))
+	if (m_sConnectThrottle.HasItem(pServer->GetName()))
 		return false;
 
 	if (!WriteISpoof(pUser)) {
@@ -148,7 +148,7 @@ bool CZNC::ConnectUser(CUser *pUser) {
 		return true;
 	}
 
-	m_sConnectThrottle.AddItem(pServer->GetName());
+	m_sConnectThrottle.insert(pServer->GetName());
 
 	DEBUG("User [" << pUser->GetUserName() << "] is connecting to [" << pServer->GetName() << ":" << pServer->GetPort() << "] ...");
 	pUser->PutStatus("Attempting to connect to [" + pServer->GetName() + ":" + CString(pServer->GetPort()) + "] ...");

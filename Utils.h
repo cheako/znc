@@ -238,6 +238,7 @@ private:
 
 #endif /* HAVE_LIBSSL */
 
+#if 0
 /**
  * @class TCacheMap
  * @author prozac <prozac@rottenboy.com>
@@ -364,6 +365,7 @@ private:
 	map<K, value>	m_mItems;	//!< Map of cached items.  The value portion of the map is for the expire time
 	unsigned int	m_uTTL;					//!< Default time-to-live duration
 };
+#endif
 
 /**
  * @class CSmartPtr
@@ -516,4 +518,3 @@ template<typename T>
 bool operator ==(const CSmartPtr<T>& lhs, const CSmartPtr<T>& rhs) { return (lhs.GetPtr() == rhs.GetPtr()); }
 
 #endif // !_UTILS_H
-
