@@ -986,7 +986,7 @@ public:
 	 */
 	virtual bool IsClientCapSupported(const CString& sCap, bool bState);
 	/** Called when we actually need to turn a capability on or off for a client.
-	 *  pClient->AcceptCap() or pClient->RejectCap() is called automatically,
+	 *  pClient->EnableCap() or pClient->DisableCap() is called automatically,
 	 *  so you don't need to call it manually in this hook.
 	 *  @param pClient client which requested this.
 	 *  @param sCap name of wanted capability.
