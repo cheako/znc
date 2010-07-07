@@ -840,5 +840,27 @@ void CClient::HandleCap(const CString& sLine)
 			sList += *i + " ";
 		}
 		RespondCap("LIST :" + sList.TrimSuffix_n(" "));
+	} else if (sSubCmd.Equals("CLEAR")) {
+		SCString ssRemoved;
+		for (SCString::iterator i = m_ssAcceptedCaps.begin(); i != m_ssAcceptedCaps.end(); ++i) {
+			if (CZNC::Get().GetModules().IsClientCapSupported(*i, false)) {
+				CZNC::Get().GetModules().OnClientCapRequest(this, *i, false);
+				ssRemoved.insert(*i);
+			}
+		}
+		if (m_bNamesx) {
+			m_bNamesx = false;
+			ssRemoved.insert("multi-prefix");
+		}
+		if (m_bUHNames) {
+			m_bUHNames = false;
+			ssRemoved.insert("userhost-in-names");
+		}
+		CString sList = "";
+		for (SCString::iterator i = ssRemoved.begin(); i != ssRemoved.end(); ++i) {
+			m_ssAcceptedCaps.erase(*i);
+			sList += *i + " ";
+		}
+		RespondCap("ACK :" + sList.TrimSuffix_n(" "));
 	}
 }
