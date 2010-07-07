@@ -668,8 +668,10 @@ void CIRCSock::ReadLine(const CString& sData) {
 				sArgs.Split(" ", vsTokens, false);
 
 				for (it = vsTokens.begin(); it != vsTokens.end(); ++it) {
-					if (*it == "multi-prefix" || *it == "userhost-in-names") {
+					if (*it == "multi-prefix" || *it == "userhost-in-names" || OnServerCapAvailable(*it)) {
 						PutIRC("CAP REQ :" + *it);
+						// Really need to wait ACK/NAK here...
+						// And CAP END should be after all answers.
 					}
 				}
 
@@ -679,12 +681,15 @@ void CIRCSock::ReadLine(const CString& sData) {
 				VCString vsTokens;
 				VCString::iterator it;
 				sArgs.Split(" ", vsTokens, false);
+				AcceptCap(*it);
 
 				for (it = vsTokens.begin(); it != vsTokens.end(); ++it) {
 					if (*it == "multi-prefix") {
 						m_bNamesx = true;
 					} else if (*it == "userhost-in-names") {
 						m_bUHNames = true;
+					} else {
+						MODULECALL(OnServerCapAccepted(*it), m_pUser, NULL, );
 					}
 				}
 			}
@@ -695,6 +700,11 @@ void CIRCSock::ReadLine(const CString& sData) {
 	}
 
 	m_pUser->PutUser(sLine);
+}
+
+bool CIRCSock::OnServerCapAvailable(const CString& sCap) {
+	MODULECALL(OnServerCapAvailable(sCap), m_pUser, NULL, return true);
+	return false;
 }
 
 bool CIRCSock::OnCTCPReply(CNick& Nick, CString& sMessage) {
