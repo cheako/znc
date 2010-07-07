@@ -860,7 +860,7 @@ void CClient::HandleCap(const CString& sLine)
 		}
 		CString sList = "";
 		for (SCString::iterator i = ssRemoved.begin(); i != ssRemoved.end(); ++i) {
-			RejectCap(*i);
+			DisableCap(*i);
 			sList += *i + " ";
 		}
 		RespondCap("ACK :" + sList.TrimSuffix_n(" "));
