@@ -780,6 +780,31 @@ unsigned long CString::Base64Decode(CString& sRet) const {
 	return uRet;
 }
 
+void CString::Hex(CString& sRet) const {
+	const char *hex_table = "0123456789abcdef";
+	const char *str = this->c_str();
+
+	sRet.clear();
+	for (size_t i = 0; i < this->length(); ++i) {
+		unsigned char c = str[i];
+		int high = c >> 4;
+		int low = c & 0xf;
+		sRet.push_back(hex_table[high]);
+		sRet.push_back(hex_table[low]);
+	}
+}
+
+void CString::Hex() {
+	CString sCopy(*this);
+	sCopy.Hex(*this);
+}
+
+CString CString::Hex_n() const {
+	CString sRet;
+	Hex(sRet);
+	return sRet;
+}
+
 CString CString::MD5() const {
 	return (const char*) CMD5(*this);
 }

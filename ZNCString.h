@@ -253,6 +253,10 @@ public:
 	bool Base64Encode(unsigned int uWrap = 0);
 	CString Base64Encode_n(unsigned int uWrap = 0) const;
 
+	void Hex(CString& sRet) const;
+	void Hex();
+	CString Hex_n() const;
+
 #ifdef HAVE_LIBSSL
 	CString Encrypt_n(const CString& sPass, const CString& sIvec = "") const;
 	CString Decrypt_n(const CString& sPass, const CString& sIvec = "") const;

@@ -1,3 +1,4 @@
+//  echo -n foo | openssl dgst -sha256 -hmac test
 /*
  * Copyright (C) 2004-2010  See the AUTHORS file for details.
  *
@@ -8,8 +9,36 @@
 
 #include "Chan.h"
 #include "User.h"
+#include "SHA256.h"
 
 class CAutoOpMod;
+
+/* What is the algorithm that is used?
+ * - autoop sees that someone else joins to a channel where we have ops. This
+ *   new user matches a defined user and thus should be oped. This user is added
+ *   to m_msQueue.
+ * - The timer fires and processes all entries in m_msQueue. The new user gets a
+ *   challenge: NOTICE <nick> :!ZNCAO CHALLENGE <challenge>
+ * - When we receive a !ZNCAO CHALLENGE, we check if we know the user who sent
+ *   the challenge. If yes, we compute the response:
+ *   NOTICE <nick> :!ZNCAO RESPONSE <response>
+ * - The first user receives the CHALLENGE, checks if <response> is correct and
+ *   ops the user in question.
+ *
+ * Now, what is the algorithm?!
+ *
+ * Version 1:
+ *
+ * <challenge> is just a random string with length AUTOOP_CHALLENGE_LENGTH.
+ * <response> is calculated from the challenge and the secret key like this:
+ *
+ *   response = MD5(key + "::" + challenge)
+ *
+ * Version 2:
+ *
+ * <challenge> is generates as above. However, we add " 2" at the end, so that
+ * the other end knows we are smart.
+ */
 
 #define AUTOOP_CHALLENGE_LENGTH 32
 
@@ -132,6 +161,8 @@ public:
 	MODCONSTRUCTOR(CAutoOpMod) {}
 
 	virtual bool OnLoad(const CString& sArgs, CString& sMessage) {
+		DEBUG(SHA256_HMAC("test", "foo"));
+		abort();
 		AddTimer(new CAutoOpTimer(this));
 
 		// Load the users
@@ -205,9 +236,9 @@ public:
 		CString sCommand = sMessage.Token(1);
 
 		if (sCommand.Equals("CHALLENGE")) {
-			ChallengeRespond(Nick, sMessage.Token(2));
+			ChallengeRespond(Nick, sMessage.Token(2), sMessage.Token(3));
 		} else if (sCommand.Equals("RESPONSE")) {
-			VerifyResponse(Nick, sMessage.Token(2));
+			VerifyResponse(Nick, sMessage.Token(2), sMessage.Token(3));
 		}
 
 		return HALTCORE;
@@ -334,7 +365,42 @@ public:
 		return pUser;
 	}
 
-	bool ChallengeRespond(const CNick& Nick, const CString& sChallenge) {
+	static CString SHA256_HMAC(CString sKey, const CString& sMessage) {
+		const size_t digest_size = SHA256_BLOCK_SIZE;
+		if (sKey.length() > digest_size)
+			sKey = sKey.SHA256();
+		if (sKey.length() < digest_size)
+			// Pad the key with SHA256_DIGEST_SIZE - sKey.length() null bytes
+			sKey = sKey + std::string(digest_size - sKey.length(), 0);
+
+		CString sOPad, sIPad;
+		sOPad.resize(digest_size);
+		sIPad.resize(digest_size);
+
+		DEBUG("");
+		for (size_t i = 0; i < digest_size; i++) {
+			sOPad[i] = 0x5c ^ sKey[i];
+			sIPad[i] = 0x36 ^ sKey[i];
+		}
+
+		unsigned char digest[digest_size];
+
+		CString sHash = sIPad + sMessage;
+		DEBUG(sHash.Hex_n() << " " << sHash);
+		sha256((unsigned const char *) sHash.c_str(), sHash.length(), digest);
+		sHash.assign(&digest[0], &digest[SHA256_DIGEST_SIZE]);
+
+		sHash = sOPad + sHash;
+		DEBUG(sHash.Hex_n() << " " << sHash);
+		sha256((unsigned const char *) sHash.c_str(), sHash.length(), digest);
+		sHash.assign(&digest[0], &digest[SHA256_DIGEST_SIZE]);
+
+		DEBUG(sHash.Hex_n() << " " << sHash);
+		sHash.Hex();
+		return sHash;
+	}
+
+	bool ChallengeRespond(const CNick& Nick, const CString& sChallenge, const CString& sTypeArg) {
 		// Validate before responding - don't blindly trust everyone
 		bool bValid = false;
 		bool bMatchedHost = false;
@@ -384,11 +450,19 @@ public:
 		}
 
 		CString sResponse = pUser->GetUserKey() + "::" + sChallenge;
-		PutIRC("NOTICE " + Nick.GetNick() + " :!ZNCAO RESPONSE " + sResponse.MD5());
+		CString sHash, sType;
+		if (sTypeArg.ToUInt() > 0)
+		{
+			sHash = sResponse.SHA256();
+			sType = " 1";
+		}
+		else
+			sHash = sResponse.MD5();
+		PutIRC("NOTICE " + Nick.GetNick() + " :!ZNCAO RESPONSE " + sHash + sType);
 		return false;
 	}
 
-	bool VerifyResponse(const CNick& Nick, const CString& sResponse) {
+	bool VerifyResponse(const CNick& Nick, const CString& sResponse, const CString& sTypeArg) {
 		MCString::iterator itQueue = m_msQueue.find(Nick.GetNick().AsLower());
 
 		if (itQueue == m_msQueue.end()) {
@@ -401,7 +475,14 @@ public:
 
 		for (map<CString, CAutoOpUser*>::iterator it = m_msUsers.begin(); it != m_msUsers.end(); ++it) {
 			if (it->second->HostMatches(Nick.GetHostMask())) {
-				if (sResponse == CString(it->second->GetUserKey() + "::" + sChallenge).MD5()) {
+				CString sResp = it->second->GetUserKey() + "::" + sChallenge;
+				CString sHash;
+				if (sTypeArg.ToUInt() > 0)
+					sHash = sResp.SHA256();
+				else
+					sHash = sResp.MD5();
+
+				if (sResp == sHash) {
 					OpUser(Nick, *it->second);
 					return true;
 				} else {
@@ -435,7 +516,7 @@ public:
 		// Now issue challenges for the new users in the queue
 		for (MCString::iterator it = m_msQueue.begin(); it != m_msQueue.end(); ++it) {
 			it->second = CString::RandomString(AUTOOP_CHALLENGE_LENGTH);
-			PutIRC("NOTICE " + it->first + " :!ZNCAO CHALLENGE " + it->second);
+			PutIRC("NOTICE " + it->first + " :!ZNCAO CHALLENGE " + it->second + " 1");
 		}
 	}
 
