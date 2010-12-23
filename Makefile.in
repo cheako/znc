@@ -146,6 +146,8 @@ uninstall:
 distdir:
 	rm -rf $(DISTDIR)
 	mkdir $(DISTDIR)
+	mkdir $(DISTDIR)/webskins
+	cp -rp $(srcdir)/webskins $(DISTDIR)/webskins/
 	for file in $(DISTFILES) ; do \
 		cp $(srcdir)/$$file $(DISTDIR) || exit 1 ; \
 	done

@@ -69,6 +69,8 @@ DISTFILES += $(notdir $(wildcard $(srcdir)/*.pm))
 DISTFILES_EXTRA := $(notdir $(wildcard $(srcdir)/extra/*.cpp))
 # Add tcl stuff
 DISTFILES_EXTRA += $(notdir $(wildcard $(srcdir)/extra/*.tcl))
+DISTFILES_PERL := modperl/CString.i modperl/codegen.pl modperl/functions.cpp modperl/functions.in modperl/modperl.i modperl/module.h modperl/pstring.h modperl/startup.pl
+DISTFILES_PYTHON := modpython/codegen.pl modpython/compiler.cpp modpython/cstring.i modpython/functions.in modpython/modpython.i modpython/module.h modpython/znc.py
 
 ifeq "@NOSSL@" "1"
 FILES    := $(foreach file, $(FILES), \
@@ -247,11 +249,19 @@ uninstall:
 distdir:
 	mkdir ../$(DISTDIR)/modules
 	mkdir ../$(DISTDIR)/modules/extra
+	mkdir ../$(DISTDIR)/modules/modperl
+	mkdir ../$(DISTDIR)/modules/modpython
 	for file in $(DISTFILES) ; do \
-		cp $(srcdir)/$$file ../$(DISTDIR)/modules || exit 1 ; \
+		cp $(srcdir)/$$file ../$(DISTDIR)/modules/ || exit 1 ; \
 	done
 	for file in $(DISTFILES_EXTRA) ; do \
-		cp $(srcdir)/extra/$$file ../$(DISTDIR)/modules/extra || exit 1 ; \
+		cp $(srcdir)/extra/$$file ../$(DISTDIR)/modules/extra/ || exit 1 ; \
+	done
+	for file in $(DISTFILES_PERL) ; do \
+		cp $(srcdir)/$$file ../$(DISTDIR)/modules/modperl/ || exit 1 ; \
+	done
+	for file in $(DISTFILES_PYTHON) ; do \
+		cp $(srcdir)/$$file ../$(DISTDIR)/modules/modpython/ || exit 1 ; \
 	done
 
 -include $(wildcard .depend/*.dep)
