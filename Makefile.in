@@ -153,6 +153,8 @@ distdir:
 	done
 	@$(MAKE) -C man distdir
 	@$(MAKE) -C modules distdir
+	find $(DISTDIR)/webskins -type d -exec chmod 0755 '{}' \;
+	find $(DISTDIR)/webskins -type f -exec chmod 0644 '{}' \;
 
 dist: distdir
 	tar -chf - $(DISTDIR) | gzip --best -c > $(DIST)
@@ -196,7 +198,7 @@ distcheck: distdir
 		( echo "ERROR: files left after distclean" ; exit 1 )
 	# Now test some exotic configure flags
 	cd $(DISTDIR)/_build && \
-		../configure --disable-modules --disable-openssl --disable-c-ares --disable-ipv6 && \
+		../configure --disable-openssl --disable-c-ares --disable-ipv6 && \
 		$(MAKE) all
 	# Ok, time for cleanup
 	chmod -R a+w $(DISTDIR)
