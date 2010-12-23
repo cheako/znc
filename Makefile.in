@@ -40,7 +40,7 @@ BIN_OBJS  := $(patsubst %cpp,%o,$(BIN_SRCS))
 CLEAN     := znc *.o core core.*
 DISTCLEAN := Makefile config.log config.status znc-config znc-buildmod .depend \
 	modules/.depend modules/Makefile man/Makefile znc.pc znc-uninstalled.pc $(DIST)
-DISTFILES := $(LIB_SRCS) $(BIN_SRCS) Makefile.in configure configure.in install.sh
+DISTFILES := $(LIB_SRCS) $(BIN_SRCS) Makefile.in configure configure.in install-sh
 DISTFILES += znc-config.in znc-buildmod.in znc.pc.in znc-uninstalled.pc.in *.h
 DISTFILES += config.sub config.guess
 
@@ -170,7 +170,7 @@ distcheck: distdir
 	# This tests if VPATH builds work fine
 	cd $(DISTDIR)/_inst && INSTDIR=$$(pwd) && cd $$INSTDIR && \
 		cd ../_build && \
-		../configure --prefix="$$INSTDIR" --enable-extra --enable-tcl --enable-sasl && \
+		../configure --prefix="$$INSTDIR" --enable-extra --enable-tcl --enable-sasl --enable-perl --enable-python && \
 		$(MAKE) all
 	# We install to _inst, uninstall and check if files are left behind
 	cd $(DISTDIR)/_build && \
