@@ -13,6 +13,7 @@
 #include "Socket.h"
 #include "Utils.h"
 #include "main.h"
+#include "IRCParser.h"
 
 // Forward Declarations
 class CZNC;
