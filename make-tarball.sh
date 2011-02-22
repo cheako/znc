@@ -6,11 +6,7 @@ VERSION=$1
 
 trap 'rm -rf $TMPDIR' EXIT
 
-if [ -f main.h ] ; then
-	SRC=./
-elif [ -f trunk/main.h ] ; then
-	SRC=trunk/
-else
+if [ ! -f main.h ] ; then
 	echo "Can't find source!"
 	exit -1
 fi
@@ -19,7 +15,7 @@ if [ "x$VERSION" = "x" ] ; then
 	AWK_ARG='/#define VERSION_MAJOR/ { maj = $3 }
 		/#define VERSION_MINOR/ { min = $3 }
 		END { printf "%.3f", (maj + min / 1000) }'
-	VERSION=$(awk "$AWK_ARG" ${SRC}main.h)
+	VERSION=$(awk "$AWK_ARG" main.h)
 fi
 if [ "x$VERSION" = "x" ] ; then
 	echo "Couldn't get version number"
@@ -29,10 +25,9 @@ fi
 ZNC=znc-$VERSION
 TAR=$ZNC.tar
 TARGZ=$TAR.gz
-GITDIR="--git-dir=$SRC/.git"
 
-echo "Exporting $SRC to $TMPDIR/$ZNC"
-git $GITDIR checkout-index --all --prefix=$TMPDIR/$ZNC/
+echo "Exporting . to $TMPDIR/$ZNC"
+git checkout-index --all --prefix=$TMPDIR/$ZNC/
 (
 	cd $TMPDIR/$ZNC
 	echo "Generating configure"
