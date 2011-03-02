@@ -167,6 +167,21 @@ AC_CHECK_LIB( gnugetopt, getopt_long,)
 AC_CHECK_FUNCS([lstat])
 PKG_PROG_PKG_CONFIG()
 
+# ----- Check for broken stringstream
+
+AC_MSG_CHECKING([whether std::stringstream is broken])
+AC_RUN_IFELSE([
+	AC_LANG_PROGRAM([[
+		 #include <sstream>
+	]], [[
+		std::stringstream s; s << 42;
+		return s.str() != "42";
+	]])],
+	[AC_MSG_RESULT([no])],
+	[AC_MSG_RESULT([yes])
+	 AC_MSG_ERROR([std::stringstream is broken])],
+	[AC_MSG_RESULT([cross-compiling])])
+
 # ----- Check for dlopen
 
 AC_SEARCH_LIBS([dlopen], [dl], [],
