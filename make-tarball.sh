@@ -26,7 +26,7 @@ ZNC=znc-$VERSION
 TAR=$ZNC.tar
 TARGZ=$TAR.gz
 
-echo "Exporting . to $TMPDIR/$ZNC"
+echo "Exporting . to $TMPDIR/$ZNC..."
 git checkout-index --all --prefix=$TMPDIR/$ZNC/
 (
 	cd $TMPDIR/$ZNC
@@ -42,4 +42,6 @@ git checkout-index --all --prefix=$TMPDIR/$ZNC/
 )
 echo "Done"
 mv $TMPDIR/$TARGZ .
-echo "Created $TARGZ"
+echo "Signing $TARGZ..."
+gpg --detach-sig $TARGZ
+echo "Created $TARGZ and $TARGZ.sig"
