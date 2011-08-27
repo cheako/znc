@@ -54,6 +54,7 @@ CIRCNetwork::CIRCNetwork(CUser *pUser, const CString& sName) {
 	m_QueryBuffer.SetLineCount(250);
 }
 
+// Code duplications between the two constructors, baaad
 CIRCNetwork::CIRCNetwork(CUser *pUser, const CIRCNetwork *pNetwork, bool bCloneChans) {
 	m_pUser = NULL;
 	SetUser(pUser);
@@ -100,6 +101,7 @@ CIRCNetwork::CIRCNetwork(CUser *pUser, const CIRCNetwork *pNetwork, bool bCloneC
 		CIRCSock* pSock = GetIRCSock();
 
 		if (pSock) {
+			// WTF? Can't be hit?
 			PutStatus("Jumping servers because this server is no longer in the list");
 			pSock->Quit();
 		}
@@ -124,6 +126,7 @@ CIRCNetwork::CIRCNetwork(CUser *pUser, const CIRCNetwork *pNetwork, bool bCloneC
 		CChan* pNewChan = pNetwork->FindChan(pChan->GetName());
 
 		if (!pNewChan) {
+			// WTF? Can't be hit?
 			pChan->SetInConfig(false);
 		} else {
 			if (bCloneChans)
@@ -203,6 +206,7 @@ bool CIRCNetwork::ParseConfig(CConfig *pConfig, CString& sError, bool bUpgrade) 
 		CUtils::PrintStatus(AddServer(*vit));
 	}
 
+	// Remove?
 	pConfig->FindStringVector("chan", vsList);
 	for (vit = vsList.begin(); vit != vsList.end(); ++vit) {
 		AddChan(*vit, true);
@@ -713,8 +717,10 @@ CServer* CIRCNetwork::GetCurrentServer() const {
 	return m_vServers[uIdx];
 }
 
+// WTF? Why do we have CIRCNetwork::m_sIRCServer
 void CIRCNetwork::SetIRCServer(const CString& s) { m_sIRCServer = s; }
 
+// WTF? Why?
 bool CIRCNetwork::SetNextServer(const CServer* pServer) {
 	for (unsigned int a = 0; a < m_vServers.size(); a++) {
 		if (m_vServers[a] == pServer) {

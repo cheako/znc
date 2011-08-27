@@ -131,7 +131,7 @@ unsigned long CUtils::GetLongIP(const CString& sIP) {
 	i = sscanf(sIP.c_str(), "%3[0-9].%3[0-9].%3[0-9].%3[0-9]",
 			ip[0], ip[1], ip[2], ip[3]);
 	if (i != 4)
-		return 0;
+		return -1;
 
 	// Beware that atoi("200") << 24 would overflow and turn negative!
 	ret  = atol(ip[0]) << 24;

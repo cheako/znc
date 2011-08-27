@@ -1,3 +1,4 @@
+// TODO: Test upgrading old configs?
 /*
  * Copyright (C) 2004-2011  See the AUTHORS file for details.
  *

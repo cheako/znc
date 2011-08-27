@@ -460,6 +460,7 @@ bool CZNC::WriteConfig() {
 		listenerConfig.AddKeyValuePair("AllowIRC", CString(pListener->GetAcceptType() != CListener::ACCEPT_HTTP));
 		listenerConfig.AddKeyValuePair("AllowWeb", CString(pListener->GetAcceptType() != CListener::ACCEPT_IRC));
 
+		// Do host:port as section names?
 		config.AddSubConfig("Listener", "listener" + CString(l), listenerConfig);
 	}
 
@@ -1094,6 +1095,8 @@ bool CZNC::DoRehash(CString& sError)
 	VCString vsList;
 	VCString::const_iterator vit;
 	config.FindStringVector("loadmodule", vsList);
+	// Do as a section? (same for users)
+	// Then have a way for module to write stuff into that section?
 	for (vit = vsList.begin(); vit != vsList.end(); ++vit) {
 		CString sModName = vit->Token(0);
 		CString sArgs = vit->Token(1, true);
@@ -1264,6 +1267,7 @@ bool CZNC::DoRehash(CString& sError)
 			sError = "Unhandled lines in config for User [" + sUserName + "]!";
 			CUtils::PrintError(sError);
 
+			// TODO: Get rid of this / do this in a nicer way
 			DumpConfig(pSubConf);
 			return false;
 		}

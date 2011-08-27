@@ -655,7 +655,7 @@ void CClient::AcceptLogin(CUser& User) {
 	if (!m_sNetwork.empty()) {
 		m_pNetwork = m_pUser->FindNetwork(m_sNetwork);
 		if (!m_pNetwork) {
-			PutStatus("Network (" + m_sNetwork + ") doesn't exist.");
+			PutStatus("Network [" + m_sNetwork + "] doesn't exist.");
 		}
 	} else {
 		// If a user didn't supply a network, and they have a network called "user" then automatically use this network.
@@ -667,6 +667,10 @@ void CClient::AcceptLogin(CUser& User) {
 	SendMotd();
 
 	MODULECALL(OnClientLogin(), m_pUser, m_pNetwork, this, NOTHING);
+
+	if (!m_pNetwork) {
+		// Do a PutStatus()?
+	}
 }
 
 void CClient::Timeout() {
@@ -683,6 +687,7 @@ void CClient::ConnectionRefused() {
 
 void CClient::Disconnected() {
 	DEBUG(GetSockName() << " == Disconnected()");
+	// Move to destructor?
 	SetNetwork(NULL, true, false);
 
 	MODULECALL(OnClientDisconnect(), m_pUser, m_pNetwork, this, NOTHING);

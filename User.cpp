@@ -442,9 +442,11 @@ CIRCNetwork* CUser::AddNetwork(const CString &sNetwork) {
 		return NULL;
 	}
 
+	// The constructor will call CUser::AddNetwork()?
 	return new CIRCNetwork(this, sNetwork);
 }
 
+// TODO make this protected and make other class a friend?
 bool CUser::AddNetwork(CIRCNetwork *pNetwork) {
 	if (FindNetwork(pNetwork->GetName())) {
 		return false;
@@ -455,6 +457,7 @@ bool CUser::AddNetwork(CIRCNetwork *pNetwork) {
 	return true;
 }
 
+// Make private, there is DeleteNetwork for the job?
 void CUser::RemoveNetwork(CIRCNetwork *pNetwork) {
 	for (vector<CIRCNetwork*>::iterator it = m_vIRCNetworks.begin(); it != m_vIRCNetworks.end(); ++it) {
 		if (pNetwork == *it) {
@@ -468,6 +471,8 @@ bool CUser::DeleteNetwork(CString sNetwork) {
 	CIRCNetwork *pNetwork = FindNetwork(sNetwork);
 
 	if (pNetwork) {
+		// The destructor will call CUser::RemoveNetwork
+		// TODO: Really?
 		delete pNetwork;
 		return true;
 	}
@@ -510,7 +515,7 @@ CString& CUser::ExpandString(const CString& sStr, CString& sRet) const {
 	sRet = sStr;
 	sRet.Replace("%user%", GetUserName());
 	sRet.Replace("%defnick%", GetNick());
-	sRet.Replace("%nick%", GetNick());
+	sRet.Replace("%nick%", GetNick()); // XXX
 	sRet.Replace("%altnick%", GetAltNick());
 	sRet.Replace("%ident%", GetIdent());
 	sRet.Replace("%realname%", GetRealName());
@@ -560,6 +565,7 @@ CString& CUser::AddTimestamp(const CString& sStr, CString& sRet) const {
 }
 
 void CUser::BounceAllClients() {
+	// XXX shouldn't this be removed?!
 	for (unsigned int a = 0; a < m_vClients.size(); a++) {
 		m_vClients[a]->BouncedOff();
 	}
@@ -640,6 +646,8 @@ bool CUser::Clone(const CUser& User, CString& sErrorRet, bool bCloneChans) {
 	// Networks
 	const vector<CIRCNetwork*>& vNetworks = User.GetNetworks();
 	for (a = 0; a < vNetworks.size(); a++) {
+		// Does this work at all? Wouldn't this clone just duplicate
+		// networks?
 		new CIRCNetwork(this, vNetworks[a], bCloneChans);
 	}
 	// !Networks
@@ -904,6 +912,7 @@ CString CUser::GetLocalDCCIP() {
 	return "";
 }
 
+// XXX Remove? (Assuming that this only puts to users without a network)
 bool CUser::PutUser(const CString& sLine, CClient* pClient, CClient* pSkipClient) {
 	for (unsigned int a = 0; a < m_vClients.size(); a++) {
 		if ((!pClient || pClient == m_vClients[a]) && pSkipClient != m_vClients[a]) {
