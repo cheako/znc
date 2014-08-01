@@ -156,6 +156,10 @@ CModule::~CModule() {
 		RemSocket(*m_sSockets.begin());
 	}
 
+	while (!m_sJobs.empty()) {
+		CancelJob(*m_sJobs.begin());
+	}
+
 	SaveRegistry();
 }
 
@@ -447,6 +451,42 @@ void CModule::ListSockets() {
 	}
 
 	PutModule(Table);
+}
+
+CModuleJob::~CModuleJob()
+{
+	m_pModule->UnlinkJob(this);
+}
+
+void CModule::AddJob(CModuleJob *pJob)
+{
+	CThreadPool::Get().addJob(pJob);
+	m_sJobs.insert(pJob);
+}
+
+void CModule::CancelJob(CModuleJob *pJob)
+{
+	if (pJob == NULL)
+		return;
+	CThreadPool::Get().cancelJob(pJob);
+	m_sJobs.erase(pJob);
+}
+
+bool CModule::CancelJob(const CString& sJobName)
+{
+	set<CModuleJob*>::iterator it;
+	for (it = m_sJobs.begin(); it != m_sJobs.end(); ++it) {
+		if ((*it)->GetName().Equals(sJobName)) {
+			CancelJob(*it);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool CModule::UnlinkJob(CModuleJob *pJob)
+{
+	return 0 != m_sJobs.erase(pJob);
 }
 
 bool CModule::AddCommand(const CModCommand& Command)

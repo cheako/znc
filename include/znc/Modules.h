@@ -19,6 +19,7 @@
 
 #include <znc/zncconfig.h>
 #include <znc/WebModules.h>
+#include <znc/Threads.h>
 #include <znc/main.h>
 #include <set>
 #include <queue>
@@ -175,6 +176,27 @@ protected:
 
 private:
 	FPTimer_t  m_pFBCallback;
+};
+
+/// A CJob version which can be safely used in modules. The job will be
+/// cancelled when the module is unloaded.
+class CModuleJob : public CJob {
+public:
+	CModuleJob(CModule *pModule, const CString& sName, const CString& sDesc)
+		: CJob(), m_pModule(pModule), m_sName(sName), m_sDescription(sDesc) {
+	}
+	virtual ~CModuleJob();
+
+	// Getters
+	CModule* GetModule() const { return m_pModule; }
+	const CString& GetName() const { return m_sName; }
+	const CString& GetDescription() const { return m_sDescription; }
+	// !Getters
+
+protected:
+	CModule* m_pModule;
+	const CString  m_sName;
+	const CString  m_sDescription;
 };
 
 class CModInfo {
@@ -885,6 +907,13 @@ public:
 	virtual void ListSockets();
 	// !Socket stuff
 
+	// Job stuff
+	void AddJob(CModuleJob *pJob);
+	void CancelJob(CModuleJob *pJob);
+	bool CancelJob(const CString& sJobName);
+	bool UnlinkJob(CModuleJob *pJob);
+	// !Job stuff
+
 	// Command stuff
 	/// Register the "Help" command.
 	void AddHelpCommand();
@@ -1052,6 +1081,7 @@ protected:
 	CString            m_sDescription;
 	std::set<CTimer*>  m_sTimers;
 	std::set<CSocket*> m_sSockets;
+	std::set<CModuleJob*> m_sJobs;
 	ModHandle          m_pDLL;
 	CSockManager*      m_pManager;
 	CUser*             m_pUser;
