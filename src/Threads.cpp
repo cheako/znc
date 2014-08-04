@@ -224,7 +224,7 @@ void CThreadPool::cancelJobFinish(std::set<CJob *> &wait, std::set<CJob *> &fini
 				// Re-set state for the destructor
 				(*it)->m_eState = CJob::CANCELLED;;
 				delete *it;
-				wait.erase(++it);
+				wait.erase(it++);
 			} else
 				it++;
 		}
