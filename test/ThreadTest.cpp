@@ -51,9 +51,9 @@ public:
 	}
 
 	virtual void runMain() {
-		assert(m_bThreadReady == true);
-		assert(m_bThreadDone == true);
-		assert(!wasCancelled());
+		ASSERT_TRUE(m_bThreadReady);
+		ASSERT_TRUE(m_bThreadDone);
+		ASSERT_FALSE(wasCancelled());
 	}
 
 private:
@@ -104,8 +104,8 @@ public:
 	}
 
 	virtual void runMain() {
-		assert(m_bThreadReady == true);
-		assert(wasCancelled());
+		ASSERT_TRUE(m_bThreadReady);
+		ASSERT_TRUE(wasCancelled());
 	}
 
 private:
@@ -165,7 +165,7 @@ public:
 	}
 
 	virtual void runMain() {
-		assert(!wasCancelled());
+		ASSERT_FALSE(wasCancelled());
 	}
 
 private:
