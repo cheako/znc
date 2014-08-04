@@ -156,9 +156,9 @@ CModule::~CModule() {
 		RemSocket(*m_sSockets.begin());
 	}
 
-	while (!m_sJobs.empty()) {
-		CancelJob(*m_sJobs.begin());
-	}
+#ifdef HAVE_PTHREAD
+	CancelJobs(m_sJobs);
+#endif
 
 	SaveRegistry();
 }
@@ -453,6 +453,7 @@ void CModule::ListSockets() {
 	PutModule(Table);
 }
 
+#ifdef HAVE_PTHREAD
 CModuleJob::~CModuleJob()
 {
 	m_pModule->UnlinkJob(this);
@@ -484,10 +485,22 @@ bool CModule::CancelJob(const CString& sJobName)
 	return false;
 }
 
+void CModule::CancelJobs(const std::set<CModuleJob*>& sJobs)
+{
+	set<CModuleJob*>::const_iterator it;
+	set<CJob*> sPlainJobs(sJobs.begin(), sJobs.end());
+
+	for (it = sJobs.begin(); it != sJobs.end(); ++it)
+		m_sJobs.erase(*it);
+
+	CThreadPool::Get().cancelJobs(sPlainJobs);
+}
+
 bool CModule::UnlinkJob(CModuleJob *pJob)
 {
 	return 0 != m_sJobs.erase(pJob);
 }
+#endif
 
 bool CModule::AddCommand(const CModCommand& Command)
 {

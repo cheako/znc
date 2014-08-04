@@ -178,6 +178,7 @@ private:
 	FPTimer_t  m_pFBCallback;
 };
 
+#ifdef HAVE_PTHREAD
 /// A CJob version which can be safely used in modules. The job will be
 /// cancelled when the module is unloaded.
 class CModuleJob : public CJob {
@@ -198,6 +199,7 @@ protected:
 	const CString  m_sName;
 	const CString  m_sDescription;
 };
+#endif
 
 class CModInfo {
 public:
@@ -907,12 +909,15 @@ public:
 	virtual void ListSockets();
 	// !Socket stuff
 
+#ifdef HAVE_PTHREAD
 	// Job stuff
 	void AddJob(CModuleJob *pJob);
 	void CancelJob(CModuleJob *pJob);
 	bool CancelJob(const CString& sJobName);
+	void CancelJobs(const std::set<CModuleJob*>& sJobs);
 	bool UnlinkJob(CModuleJob *pJob);
 	// !Job stuff
+#endif
 
 	// Command stuff
 	/// Register the "Help" command.
@@ -1081,7 +1086,9 @@ protected:
 	CString            m_sDescription;
 	std::set<CTimer*>  m_sTimers;
 	std::set<CSocket*> m_sSockets;
+#ifdef HAVE_PTHREAD
 	std::set<CModuleJob*> m_sJobs;
+#endif
 	ModHandle          m_pDLL;
 	CSockManager*      m_pManager;
 	CUser*             m_pUser;

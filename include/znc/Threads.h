@@ -251,6 +251,11 @@ public:
 	/// This function BLOCKS until the job finishes!
 	void cancelJob(CJob *job);
 
+	/// Cancel some jobs that were previously passed to addJob(). This *might*
+	/// mean that runThread() and/or runMain() will not be called on some of
+        /// the jobs. This function BLOCKS until all jobs finish!
+	void cancelJobs(const std::set<CJob *> &jobs);
+
 	int getReadFD() const {
 		return m_iJobPipe[0];
 	}
@@ -262,6 +267,9 @@ private:
 
 	// Check if the calling thread is still needed, must be called with m_mutex held
 	bool threadNeeded() const;
+
+        void cancelJobPrepare(std::set<CJob *> &wait, std::set<CJob *> &finished, CJob *job);
+        void cancelJobFinish(std::set<CJob *> &wait, std::set<CJob *> &finished);
 
 	CJob *getJobFromPipe() const;
 	void finishJob(CJob *) const;

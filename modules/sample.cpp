@@ -20,8 +20,6 @@
 
 using std::vector;
 
-#warning TODO: Inherit from CModuleJob and test everything works fine
-
 class CSampleTimer : public CTimer {
 public:
 
