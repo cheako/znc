@@ -71,6 +71,10 @@ public:
 	}
 
 private:
+	// Undefined copy constructor and assignment operator
+	CMutex(const CMutex&);
+	CMutex& operator=(const CMutex&);
+
 	pthread_mutex_t m_mutex;
 };
 
@@ -105,6 +109,10 @@ public:
 	}
 
 private:
+	// Undefined copy constructor and assignment operator
+	CMutexLocker(const CMutexLocker&);
+	CMutexLocker& operator=(const CMutexLocker&);
+
 	CMutex &m_mutex;
 	bool m_locked;
 };
@@ -161,6 +169,10 @@ public:
 	}
 
 private:
+	// Undefined copy constructor and assignment operator
+	CConditionVariable(const CConditionVariable&);
+	CConditionVariable& operator=(const CConditionVariable&);
+
 	pthread_cond_t m_cond;
 };
 
@@ -185,6 +197,10 @@ public:
 			exit(1);
 		}
 	}
+
+private:
+	// Undefined constructor
+	CThread();
 };
 
 /**
@@ -229,6 +245,10 @@ public:
 	bool wasCancelled() const;
 
 private:
+	// Undefined copy constructor and assignment operator
+	CJob(const CJob&);
+	CJob& operator=(const CJob&);
+
 	// Synchronized via the thread pool's mutex! Do not access without that mutex!
 	EJobState m_eState;
 };
