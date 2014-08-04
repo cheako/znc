@@ -156,74 +156,58 @@ void CThreadPool::addJob(CJob *job) {
 }
 
 void CThreadPool::cancelJob(CJob *job) {
-	CMutexLocker guard(m_mutex);
-	std::set<CJob *> wait, finished;
-	cancelJobPrepare(wait, finished, job);
-	cancelJobFinish(wait, finished);
+	std::set<CJob *> jobs;
+	jobs.insert(job);
+	cancelJobs(jobs);
 }
 
 void CThreadPool::cancelJobs(const std::set<CJob *> &jobs) {
 	CMutexLocker guard(m_mutex);
-	std::set<CJob *> wait, finished;
+	std::set<CJob *> wait, finished, deleteLater;
 	std::set<CJob *>::const_iterator it;
 
-	for (it = jobs.begin(); it != jobs.end(); ++it)
-		cancelJobPrepare(wait, finished, *it);
-	cancelJobFinish(wait, finished);
-}
+	// Start cancelling all jobs
+	for (it = jobs.begin(); it != jobs.end(); ++it) {
+		switch ((*it)->m_eState) {
+		case CJob::READY: {
+			(*it)->m_eState = CJob::CANCELLED;
 
-void CThreadPool::cancelJobPrepare(std::set<CJob *> &wait, std::set<CJob *> &finished, CJob *job) {
-	// m_mutex must be locked by caller!
-	switch (job->m_eState) {
-	case CJob::READY: {
-		job->m_eState = CJob::CANCELLED;
+			// Job wasn't started yet, must be in the queue
+			std::list<CJob *>::iterator it2 = std::find(m_jobs.begin(), m_jobs.end(), *it);
+			assert(it2 != m_jobs.end());
+			m_jobs.erase(it2);
+			deleteLater.insert(*it);
+			continue;
+		}
 
-		// Job wasn't started yet, must be in the queue
-		std::list<CJob *>::iterator it = std::find(m_jobs.begin(), m_jobs.end(), job);
-		assert(it != m_jobs.end());
-		m_jobs.erase(it);
-		delete job;
-		return;
+		case CJob::RUNNING:
+			(*it)->m_eState = CJob::CANCELLED;
+			wait.insert(*it);
+			continue;
+
+		case CJob::DONE:
+			finished.insert(*it);
+			continue;
+
+		case CJob::CANCELLED:
+		default:
+			assert(0);
+		}
 	}
 
-	case CJob::RUNNING: {
-		job->m_eState = CJob::CANCELLED;
-		wait.insert(job);
-		return;
-	}
-
-	case CJob::DONE: {
-		finished.insert(job);
-		return;
-	}
-
-	case CJob::CANCELLED:
-	default:
-		assert(0);
-	}
-}
-
-void CThreadPool::cancelJobFinish(std::set<CJob *> &wait, std::set<CJob *> &finished) {
-	// m_mutex must be locked by caller!
-
-	// First handle finished jobs. They must already be in the pipe.
-	while (!finished.empty()) {
-		CJob *job = getJobFromPipe();
-		finishJob(job);
-		finished.erase(job);
-	}
+	// Now wait for cancellation to be done
 
 	// Collect jobs that really were cancelled. Finished cancellation is
 	// signaled by changing their state to DONE.
 	while (!wait.empty()) {
 		// First collect jobs that were already done
-		std::set<CJob *>::iterator it = wait.begin();
+		it = wait.begin();
 		while (it != wait.end()) {
 			if ((*it)->m_eState != CJob::CANCELLED) {
 				assert((*it)->m_eState == CJob::DONE);
 				// Re-set state for the destructor
 				(*it)->m_eState = CJob::CANCELLED;;
-				delete *it;
+				deleteLater.insert(*it);
 				wait.erase(it++);
 			} else
 				it++;
@@ -234,6 +218,22 @@ void CThreadPool::cancelJobFinish(std::set<CJob *> &wait, std::set<CJob *> &fini
 
 		// Then wait for more to be done
 		m_cancellationCond.wait(m_mutex);
+	}
+
+	// We must call destructors with m_mutex unlocked so that they can call wasCancelled()
+	guard.unlock();
+
+	// Handle finished jobs. They must already be in the pipe.
+	while (!finished.empty()) {
+		CJob *job = getJobFromPipe();
+		finishJob(job);
+		finished.erase(job);
+	}
+
+	// Delete things that still need to be deleted
+	while (!deleteLater.empty()) {
+		delete *deleteLater.begin();
+		deleteLater.erase(deleteLater.begin());
 	}
 }
 

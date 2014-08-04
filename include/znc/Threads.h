@@ -288,9 +288,6 @@ private:
 	// Check if the calling thread is still needed, must be called with m_mutex held
 	bool threadNeeded() const;
 
-        void cancelJobPrepare(std::set<CJob *> &wait, std::set<CJob *> &finished, CJob *job);
-        void cancelJobFinish(std::set<CJob *> &wait, std::set<CJob *> &finished);
-
 	CJob *getJobFromPipe() const;
 	void finishJob(CJob *) const;
 
