@@ -18,6 +18,8 @@
 #include <znc/Config.h>
 #include <znc/znc.h>
 
+#include <sys/un.h>
+
 CListener::~CListener() {
     if (m_pListener) CZNC::Get().GetManager().DelSockByAddr(m_pListener);
 }
@@ -79,6 +81,60 @@ CConfig CTCPListener::ToConfig() const {
         "IPv4", CString(GetAddrType() != ADDR_IPV6ONLY));
     listenerConfig.AddKeyValuePair(
         "IPv6", CString(GetAddrType() != ADDR_IPV4ONLY));
+
+    return listenerConfig;
+}
+
+CUnixListener::~CUnixListener() {
+}
+
+bool CUnixListener::Listen() {
+    CString sName = "unix:" + m_sPath;
+    int fd;
+    struct sockaddr_un addr;
+
+    fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0)
+        return false;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, m_sPath.c_str(), sizeof(addr.sun_path)-1);
+
+    CFile::Delete(m_sPath);
+    if (bind(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) < 0) {
+        close(fd);
+        return false;
+    }
+    if (listen(fd, 42) < 0) {
+        close(fd);
+        return false;
+    }
+
+    m_pListener = new CRealListener(*this);
+
+#ifdef HAVE_LIBSSL
+    if (IsSSL()) {
+        m_pListener->SetSSL(true);
+        m_pListener->SetPemLocation(CZNC::Get().GetPemLocation());
+        m_pListener->SetKeyLocation(CZNC::Get().GetKeyLocation());
+        m_pListener->SetDHParamLocation(CZNC::Get().GetDHParamLocation());
+    }
+#endif
+
+    m_pListener->SetType(Csock::LISTENER);
+    m_pListener->SetRSock(fd);
+    m_pListener->SetWSock(fd);
+    m_pListener->NonBlockingIO();
+    CZNC::Get().GetManager().AddSock(m_pListener, sName);
+
+    return true;
+}
+
+CConfig CUnixListener::ToConfig() const {
+    CConfig listenerConfig = CListener::ToConfig();
+
+    listenerConfig.AddKeyValuePair("Path", GetPath());
 
     return listenerConfig;
 }
