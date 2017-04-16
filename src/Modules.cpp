@@ -1711,7 +1711,7 @@ bool CModules::UnloadModule(const CString& sModule, CString& sRetMsg) {
             }
         }
 
-        dlclose(p);
+        //dlclose(p);
         sRetMsg = "Module [" + sMod + "] unloaded";
 
         return true;
