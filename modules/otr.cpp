@@ -704,7 +704,10 @@ class COtrMod : public CModule {
     virtual ~COtrMod() {
         // No need to deactivate timers, they are removed in
         // CModule::~CModule().
-        if (m_pUserState) otrl_userstate_free(m_pUserState);
+        if (m_pUserState) {
+                otrl_context_forget_all(m_pUserState);
+                otrl_userstate_free(m_pUserState);
+        }
     }
 
     static void DefaultQueryWorkaround(CString& sMessage) {
