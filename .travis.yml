@@ -67,7 +67,6 @@ script:
     - ../configure$CFGSUFFIX --enable-perl --enable-python --enable-tcl --enable-cyrus --enable-charset $CFGFLAGS CXXFLAGS="$CXXFLAGS $MYCXXFLAGS" LDFLAGS="$LDFLAGS $MYLDFLAGS"
     - if [[ "$BUILD_WITH" == "cmake" ]]; then cmake --system-information; else cat config.log; fi
     - make VERBOSE=1
-    - make VERBOSE=1 $UNITTEST
     - sudo make install
     - make VERBOSE=1 $INTTEST
     - cd "$TRAVIS_BUILD_DIR"
