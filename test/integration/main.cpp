@@ -188,7 +188,7 @@ class Process : public IO<QProcess> {
         // ZNC uses 1 too to report startup failure.
         // But we don't want to confuse expected startup failure with ASAN
         // error.
-        env.insert("ASAN_OPTIONS", "exitcode=57");
+        env.insert("ASAN_OPTIONS", "exitcode=57:verbosity=1:malloc_context_size=20");
         m_proc.setProcessEnvironment(env);
         setup(&m_proc);
         m_proc.start(cmd, args);
