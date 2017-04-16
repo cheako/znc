@@ -12,50 +12,8 @@ matrix:
     fast_finish: true
     include:
         - os: linux
-          compiler: gcc
-          env: BUILD_TYPE=normal BUILD_WITH=cmake
-        - os: linux
-          compiler: gcc
-          env: BUILD_TYPE=normal BUILD_WITH=autoconf
-        - os: linux
-          compiler: gcc
-          env: BUILD_TYPE=coverage BUILD_WITH=autoconf
-        - os: linux
           compiler: clang
           env: BUILD_TYPE=asan BUILD_WITH=cmake
-        - os: linux
-          compiler: clang
-          env: BUILD_TYPE=tsan BUILD_WITH=cmake
-        - os: osx
-          osx_image: xcode6.4 # OS X 10.10
-          compiler: clang
-          env: BUILD_TYPE=normal BUILD_WITH=cmake
-        - os: osx
-          osx_image: xcode6.4 # OS X 10.10
-          compiler: clang
-          env: BUILD_TYPE=normal BUILD_WITH=autoconf
-        - os: osx
-          osx_image: xcode7.3 # OS X 10.11
-          compiler: clang
-          env: BUILD_TYPE=normal BUILD_WITH=cmake
-        - os: osx
-          osx_image: xcode7.3 # OS X 10.11
-          compiler: clang
-          env: BUILD_TYPE=normal BUILD_WITH=autoconf
-        - os: osx
-          osx_image: xcode8.2 # macOS 10.12
-          compiler: clang
-          env: BUILD_TYPE=normal BUILD_WITH=cmake
-        - os: osx
-          osx_image: xcode8.2 # macOS 10.12
-          compiler: clang
-          env: BUILD_TYPE=normal BUILD_WITH=autoconf
-        - os: linux
-          compiler: gcc
-          env: BUILD_TYPE=tarball BUILD_WITH=cmake
-        - os: linux
-          compiler: gcc
-          env: BUILD_TYPE=tarball BUILD_WITH=autoconf
 before_install:
     - "echo os: [$TRAVIS_OS_NAME] build: [$BUILD_TYPE]"
     - if [[ "$BUILD_TYPE" == "normal" ]]; then export CFGFLAGS= MYCXXFLAGS= MYLDFLAGS=; fi
