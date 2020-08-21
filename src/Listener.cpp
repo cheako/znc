@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+#include <cstdlib>
+#include <sys/types.h>
+#include <grp.h>
+
+#include <znc/FileUtils.h>
 #include <znc/Listener.h>
 #include <znc/Config.h>
 #include <znc/znc.h>
@@ -100,12 +105,97 @@ bool CUnixListener::Listen() {
     setupSSL(m_pListener);
 
     CZNC::Get().GetManager().AddSock(m_pListener, sName);
-    return m_pListener->ListenUnix(m_sPath);
+
+    // Linux abstract namespace has no permmisions.
+    if (m_sPath[0] == '@') return m_pListener->ListenUnix(m_sPath);
+
+    CFile path = CFile(m_sPath);
+    CString sPathGetDir = path.GetDir();
+    CString sTemplateRaw;
+    if (sPathGetDir.empty()) {
+        // If empty, cwd?
+        sTemplateRaw = CString("./XXXXXX");
+    } else {
+        sTemplateRaw = sPathGetDir + "XXXXXX";
+    }
+    auto sTemplateDirectory = strdup(CFile(sTemplateRaw).GetLongName().c_str());
+    auto mkdtemp_ret = mkdtemp(sTemplateDirectory);
+    if(!mkdtemp_ret) {
+        // TODO: do something with errno?
+        free(sTemplateDirectory);
+        return false;
+    }
+    CFile mkdtemp_path = CFile(CString(mkdtemp_ret));
+    free(sTemplateDirectory);
+    if (!mkdtemp_path.Chmod(0500)) {
+        // TODO: do something with errno?
+        mkdtemp_path.Delete(); // -f
+        return false;
+    }
+
+    auto sTemplateSock = strdup((mkdtemp_path.GetLongName() + "/XXXXXX").c_str());
+    auto mkstemp_ret = mkstemp(sTemplateSock);
+    if(!mkstemp_ret) {
+        // TODO: do something with errno?
+        free(sTemplateSock);
+        mkdtemp_path.Delete(); // -f
+        return false;
+    }
+    free(sTemplateSock);
+    CFile mkstemp_path = CFile(CString(mkstemp_ret));
+    mkstemp_path.Delete(); // -f
+    if (!m_pListener->ListenUnix(mkstemp_path.GetLongName())) {
+        mkdtemp_path.Delete(); // -f
+        return false;
+    }
+
+    // TODO: group lookup part of FileUtils?
+    if(m_sGroup[0]) {
+        auto group = getgrnam(m_sGroup.c_str());
+        if (!group) {
+            // TODO: do something with errno?
+            // TODO: Clenup listener??
+            mkstemp_path.Delete(); // -f
+            mkdtemp_path.Delete(); // -f
+            return false;
+        }
+
+        if(!mkstemp_path.Chgrp(group->gr_gid)) {
+            // TODO: Clenup listener??
+            mkstemp_path.Delete(); // -f
+            mkdtemp_path.Delete(); // -f
+            return false;
+        }
+
+        if(!mkstemp_path.Chmod(0660)) {
+            // TODO: Clenup listener??
+            mkstemp_path.Delete(); // -f
+            mkdtemp_path.Delete(); // -f
+            return false;
+        }
+    } else {
+        if(!mkstemp_path.Chmod(0600)) {
+            // TODO: Clenup listener??
+            mkstemp_path.Delete(); // -f
+            mkdtemp_path.Delete(); // -f
+            return false;
+        }
+    }
+
+    if (!mkstemp_path.Move(m_sPath)) {
+        // TODO: Clenup listener??
+        mkstemp_path.Delete(); // -f
+        mkdtemp_path.Delete(); // -f
+        return false;
+    };
+    mkdtemp_path.Delete(); // -f
+    return true;
 }
 
 CConfig CUnixListener::ToConfig() const {
     CConfig listenerConfig = CListener::ToConfig();
 
+    listenerConfig.AddKeyValuePair("Group", GetGroup());
     listenerConfig.AddKeyValuePair("Path", GetPath());
 
     return listenerConfig;

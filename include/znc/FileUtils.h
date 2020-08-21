@@ -100,6 +100,8 @@ class CFile {
                      bool bOverwrite = false);
     bool Chmod(mode_t mode);
     static bool Chmod(const CString& sFile, mode_t mode);
+    bool Chgrp(gid_t mode);
+    static bool Chgrp(const CString& sFile, gid_t group);
     bool Seek(off_t uPos);
     bool Truncate();
     bool Sync();

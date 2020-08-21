@@ -96,9 +96,10 @@ class CTCPListener : public CListener {
 
 class CUnixListener : public CListener {
   public:
-    CUnixListener(const CString& sPath, const CString& sURIPrefix, bool bSSL,
-                 EAcceptType eAccept)
+    CUnixListener(const CString& sGroup, const CString& sPath,
+                  const CString& sURIPrefix, bool bSSL, EAcceptType eAccept)
         : CListener(sURIPrefix, bSSL, eAccept),
+          m_sGroup(sGroup),
           m_sPath(sPath) {}
     ~CUnixListener();
 
@@ -106,6 +107,7 @@ class CUnixListener : public CListener {
     CUnixListener& operator=(const CUnixListener&) = delete;
 
     // Getters
+    const CString& GetGroup() const { return m_sGroup; }
     const CString& GetPath() const { return m_sPath; }
     // !Getters
 
@@ -113,6 +115,7 @@ class CUnixListener : public CListener {
     CConfig ToConfig() const override;
 
   protected:
+    CString m_sGroup;
     CString m_sPath;
 };
 

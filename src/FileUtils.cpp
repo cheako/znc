@@ -289,10 +289,11 @@ bool CFile::Copy(const CString& sOldFileName, const CString& sNewFileName,
 
 bool CFile::Chmod(mode_t mode) {
     if (m_iFD == -1) {
-        errno = EBADF;
-        return false;
-    }
-    if (fchmod(m_iFD, mode) != 0) {
+        if (Chmod(m_sLongName, mode)) {
+            m_bHadError = true;
+            return false;
+        }
+    } else if (fchmod(m_iFD, mode) != 0) {
         m_bHadError = true;
         return false;
     }
@@ -301,6 +302,23 @@ bool CFile::Chmod(mode_t mode) {
 
 bool CFile::Chmod(const CString& sFile, mode_t mode) {
     return (chmod(sFile.c_str(), mode) == 0);
+}
+
+bool CFile::Chgrp(gid_t group) {
+    if (m_iFD == -1) {
+        if (Chgrp(m_sLongName, group)) {
+            m_bHadError = true;
+            return false;
+        }
+    } else if (fchown(m_iFD, -1, group) != 0) {
+        m_bHadError = true;
+        return false;
+    }
+    return true;
+}
+
+bool CFile::Chgrp(const CString& sFile, gid_t group) {
+    return (chown(sFile.c_str(), -1, group) == 0);
 }
 
 bool CFile::Seek(off_t uPos) {

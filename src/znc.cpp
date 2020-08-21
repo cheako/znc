@@ -1707,7 +1707,7 @@ bool CZNC::AddTCPListener(unsigned short uPort, const CString& sBindHost,
     return true;
 }
 
-bool CZNC::AddUnixListener(const CString& sPath, const CString& sURIPrefixRaw,
+bool CZNC::AddUnixListener(const CString& sGroup, const CString& sPath, const CString& sURIPrefixRaw,
                            bool bSSL, CListener::EAcceptType eAccept,
                            CString& sError) {
     CUtils::PrintAction("Binding to path [" + sPath + "]");
@@ -1752,7 +1752,7 @@ bool CZNC::AddUnixListener(const CString& sPath, const CString& sURIPrefixRaw,
     }
 
     CListener* pListener =
-        new CUnixListener(sPath, sURIPrefix, bSSL, eAccept);
+        new CUnixListener(sGroup, sPath, sURIPrefix, bSSL, eAccept);
 
     if (!pListener->Listen()) {
         sError = FormatBindError();
@@ -1770,6 +1770,7 @@ bool CZNC::AddUnixListener(const CString& sPath, const CString& sURIPrefixRaw,
 bool CZNC::AddListener(CConfig* pConfig, CString& sError) {
     CString sBindHost;
     CString sURIPrefix;
+    CString sGroup;
     CString sPath;
     bool bSSL;
     bool b4;
@@ -1789,6 +1790,8 @@ bool CZNC::AddListener(CConfig* pConfig, CString& sError) {
             sError = "No port and no path given";
             CUtils::PrintError(sError);
             return false;
+        } else {
+            pConfig->FindStringEntry("group", sGroup, "");
         }
     }
 
@@ -1831,7 +1834,7 @@ bool CZNC::AddListener(CConfig* pConfig, CString& sError) {
         return AddTCPListener(uPort, sBindHost, sURIPrefix, bSSL, eAddr,
                               eAccept, sError);
     }
-    return AddUnixListener(sPath, sURIPrefix, bSSL, eAccept, sError);
+    return AddUnixListener(sGroup, sPath, sURIPrefix, bSSL, eAccept, sError);
 }
 
 bool CZNC::AddListener(CListener* pListener) {
