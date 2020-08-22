@@ -323,6 +323,8 @@ TEST_F(ZNCTest, UnixSocketUser) {
     out << "<User test>\nPass = test\nAdmin = true\n</User>\n";
     config.close();
 
+    system((const char*)(config.fileName() + "cat ").data());
+
     auto znc = Run();
 
     // Connect to it and log in
