@@ -339,5 +339,40 @@ TEST_F(ZNCTest, UnixSocketUser) {
     wrapper.ReadUntil("Welcome to ZNC");
 }
 
+TEST_F(ZNCTest, UnixSocketGroup) {
+    // Create a config
+    QTemporaryDir tempDir;
+    QDir dir(tempDir.path());
+    QString socketName = dir.filePath("socket");
+    QString socketGroup = QString("cdrom"); // Just assume user in this group?
+    QFile config(m_dir.path() + "/configs/znc.conf");
+    ASSERT_TRUE(config.open(QIODevice::WriteOnly | QIODevice::Text));
+
+    QTextStream out(&config);
+    // FIXME: Hardcoding a version is bad
+    out << "Version = 1.9.x\n<Listener 42>\nPath = ";
+    out << socketName;
+    out << "\nGroup = ";
+    out << socketGroup;
+    out << "\nSSL = false\n</Listener>\n";
+    out << "<User test>\nPass = test\nAdmin = true\n</User>\n";
+    config.close();
+
+    auto znc = Run();
+
+    // Connect to it and log in
+    QLocalSocket socket;
+    socket.connectToServer(socketName);
+    ASSERT_TRUE(socket.waitForConnected())
+        << socket.errorString().toStdString();
+
+    auto wrapper = IO<QLocalSocket>(&socket, true);
+    wrapper.Write("PASS :test:test");
+    wrapper.Write("NICK test");
+    wrapper.Write("USER user/test x x :x");
+
+    wrapper.ReadUntil("Welcome to ZNC");
+}
+
 }  // namespace
 }  // namespace znc_inttest
